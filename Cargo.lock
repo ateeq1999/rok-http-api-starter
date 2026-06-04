@@ -1753,6 +1753,7 @@ dependencies = [
 name = "rok-api-start"
 version = "0.6.1"
 dependencies = [
+ "anyhow",
  "async-trait",
  "axum",
  "chrono",

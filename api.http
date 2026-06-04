@@ -1,6 +1,6 @@
 ### ─── Variables ───────────────────────────────────────────
 
-@baseUrl = http://localhost:8080
+@baseUrl = http://localhost:8080/api/v1
 @token = <your-access-token>
 @refreshToken = <your-refresh-token>
 @userId = 1
@@ -58,11 +58,11 @@ GET {{baseUrl}}/auth/google/callback?code=<authorization-code>&state=<state>
 ### ─── User Management (Admin) ─────────────────────────────
 
 ### List Users
-GET {{baseUrl}}/api/v1/users
+GET {{baseUrl}}/users
 Authorization: Bearer {{token}}
 
 ### Create User
-POST {{baseUrl}}/api/v1/users
+POST {{baseUrl}}/users
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -74,11 +74,11 @@ Content-Type: application/json
 }
 
 ### Show User
-GET {{baseUrl}}/api/v1/users/{{userId}}
+GET {{baseUrl}}/users/{{userId}}
 Authorization: Bearer {{token}}
 
 ### Update User
-PUT {{baseUrl}}/api/v1/users/{{userId}}
+PUT {{baseUrl}}/users/{{userId}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -88,19 +88,19 @@ Content-Type: application/json
 }
 
 ### Delete User
-DELETE {{baseUrl}}/api/v1/users/{{userId}}
+DELETE {{baseUrl}}/users/{{userId}}
 Authorization: Bearer {{token}}
 
 ### ─── Profile ─────────────────────────────────────────────
 
 ### Get Current User
-GET {{baseUrl}}/api/v1/me
+GET {{baseUrl}}/me
 Authorization: Bearer {{token}}
 
 ### ─── OTP / Email Verification ──────────────────────────
 
 ### Send OTP
-POST {{baseUrl}}/api/v1/otp/send
+POST {{baseUrl}}/otp/send
 Content-Type: application/json
 
 {
@@ -108,7 +108,7 @@ Content-Type: application/json
 }
 
 ### Verify OTP
-POST {{baseUrl}}/api/v1/otp/verify
+POST {{baseUrl}}/otp/verify
 Content-Type: application/json
 
 {

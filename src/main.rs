@@ -2,6 +2,7 @@ mod config;
 mod controllers;
 mod error;
 mod guards;
+mod migrations;
 mod models;
 mod routes;
 mod social;
@@ -30,6 +31,10 @@ async fn main() {
     let pool = PgPool::connect(&config.database_url)
         .await
         .expect("failed to connect to database");
+
+    migrations::run(&pool)
+        .await
+        .expect("failed to run migrations");
 
     let auth = Arc::new(Auth::new(config.auth_config()).expect("Auth secret must not be empty"));
     let app_state = state::AppState {
