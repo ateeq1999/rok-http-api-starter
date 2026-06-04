@@ -12,6 +12,7 @@ mod validators;
 use std::sync::Arc;
 
 use rok_auth::Auth;
+use rok_orm::OrmLayer;
 use sqlx::PgPool;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
@@ -45,6 +46,7 @@ async fn main() {
 
     let app = routes::app_router()
         .layer(rok_auth::axum::AuthLayer::new((*auth).clone()))
+        .layer(OrmLayer::new(pool.clone()))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(app_state);
