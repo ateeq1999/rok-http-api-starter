@@ -1,0 +1,117 @@
+### ─── Variables ───────────────────────────────────────────
+
+@baseUrl = http://localhost:8080
+@token = <your-access-token>
+@refreshToken = <your-refresh-token>
+@userId = 1
+
+### ─── Auth ────────────────────────────────────────────────
+
+### Register
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "password123",
+  "name": "John Doe"
+}
+
+### Login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "password123"
+}
+
+### Logout
+POST {{baseUrl}}/auth/logout
+Authorization: Bearer {{token}}
+
+### Forgot Password
+POST {{baseUrl}}/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "user@example.com"
+}
+
+### Reset Password
+POST {{baseUrl}}/auth/reset-password
+Content-Type: application/json
+
+{
+  "token": "<reset-token>",
+  "password": "newpassword123"
+}
+
+### ─── Social Auth (Google) ────────────────────────────────
+
+### Google Login (redirects to Google)
+GET {{baseUrl}}/auth/google/authorize
+
+### Google Callback (redirect from Google)
+GET {{baseUrl}}/auth/google/callback?code=<authorization-code>&state=<state>
+
+### ─── User Management (Admin) ─────────────────────────────
+
+### List Users
+GET {{baseUrl}}/api/v1/users
+Authorization: Bearer {{token}}
+
+### Create User
+POST {{baseUrl}}/api/v1/users
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "email": "newuser@example.com",
+  "password": "password123",
+  "name": "New User",
+  "roles": "user"
+}
+
+### Show User
+GET {{baseUrl}}/api/v1/users/{{userId}}
+Authorization: Bearer {{token}}
+
+### Update User
+PUT {{baseUrl}}/api/v1/users/{{userId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Updated Name",
+  "roles": "user"
+}
+
+### Delete User
+DELETE {{baseUrl}}/api/v1/users/{{userId}}
+Authorization: Bearer {{token}}
+
+### ─── Profile ─────────────────────────────────────────────
+
+### Get Current User
+GET {{baseUrl}}/api/v1/me
+Authorization: Bearer {{token}}
+
+### ─── OTP / Email Verification ──────────────────────────
+
+### Send OTP
+POST {{baseUrl}}/api/v1/otp/send
+Content-Type: application/json
+
+{
+  "email": "user@example.com"
+}
+
+### Verify OTP
+POST {{baseUrl}}/api/v1/otp/verify
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "code": "<otp-code>"
+}
