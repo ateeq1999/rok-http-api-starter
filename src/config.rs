@@ -20,6 +20,7 @@ pub struct AppConfig {
     #[allow(dead_code)]
     pub google_redirect_uri: String,
     pub app_url: String,
+    pub otp_length: u32,
 }
 
 impl AppConfig {
@@ -58,6 +59,11 @@ impl AppConfig {
             google_redirect_uri: std::env::var("GOOGLE_REDIRECT_URI")
                 .unwrap_or_else(|_| "http://localhost:8080/auth/google/callback".into()),
             app_url: std::env::var("APP_URL").unwrap_or_else(|_| "http://localhost:8080".into()),
+            otp_length: std::env::var("OTP_LENGTH")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(6)
+                .clamp(4, 8),
         }
     }
 

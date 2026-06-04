@@ -21,3 +21,6 @@ chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1"
 async-trait = "0.1"
 lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "builder", "tokio1"] }
+rand = "0.8"
+hex = "0.4"
+sha2 = "0.10"

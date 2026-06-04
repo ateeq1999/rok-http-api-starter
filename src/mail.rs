@@ -30,12 +30,12 @@ impl Mailer {
         &self,
         to: &str,
         name: &str,
-        token: &str,
+        code: &str,
         verify_url: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let html = Self::render(
             include_str!("../templates/email_otp.html"),
-            &[("name", name), ("token", token), ("verify_url", verify_url)],
+            &[("name", name), ("code", code), ("verify_url", verify_url)],
         );
         self.send_raw(to, "Verify your email address", &html).await
     }

@@ -70,6 +70,7 @@ docker logs rok-api-starter -f
 | `APP_URL` | `http://localhost:8080` | Public-facing app URL (used in email links) |
 | `GOOGLE_CLIENT_ID` | *(empty)* | Google OAuth client ID |
 | `GOOGLE_CLIENT_SECRET` | *(empty)* | Google OAuth client secret |
+| `OTP_LENGTH` | `6` | Numeric OTP code length (4–8) |
 
 ## API Endpoints
 
@@ -111,9 +112,9 @@ open http://localhost:8025
 ```
 
 Email flows:
-- **Registration**: sends a verification email with a `{{app_url}}/verify-email?token=...` link
+- **Registration**: sends a verification email with a `{{app_url}}/verify-email?code=...` link and a numeric OTP code
 - **Forgot password**: sends a reset email with a `{{app_url}}/reset-password?token=...` link
-- **OTP send**: sends a verification email with a token
+- **OTP send**: sends a verification email with an N-digit numeric code and a verify link
 
 ## Database Migrations
 
