@@ -1,8 +1,8 @@
 ### ─── Variables ───────────────────────────────────────────
 
 @baseUrl = http://localhost:8080/api/v1
-@token = <your-access-token>
-@refreshToken = <your-refresh-token>
+@token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIiwicm9sZXMiOlsidXNlciJdLCJleHAiOjE3ODA1NjQ3NjMsImlhdCI6MTc4MDU2MTE2MywiaXNzIjoiYXh1bS1hcHAifQ.JM4mi1TeZH5MLWKY-ejfhNFZu1zXHMZI92r62XK6nao
+@refreshToken=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIiwidHlwIjoicmVmcmVzaCIsImV4cCI6MTc4MzE1MzE2MywiaWF0IjoxNzgwNTYxMTYzLCJpc3MiOiJheHVtLWFwcCIsImZpZCI6IjBmZGVkODkzLWVlZDItNDAzZC1hMjA2LWRiZTY3OWI4YjNmMSJ9.oJkoTlJdcpw_bV59jaCe1jl9m4R7rGTiPnmA-sY9KgI
 @userId = 1
 
 ### ─── Auth ────────────────────────────────────────────────
