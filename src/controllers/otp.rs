@@ -2,8 +2,13 @@ use axum::extract::State;
 use rok_auth::axum::GuestOnly;
 use rok_auth::axum::RequestContext;
 use rok_core::api::ApiResponse;
+use rok_orm::Model;
+use rok_orm::PgModel;
+use rok_orm::SqlValue;
 use rok_validate::Valid;
 
+use crate::error::AppError;
+use crate::models::EmailVerificationToken;
 use crate::models::User;
 use crate::state::AppState;
 use crate::validators::otp::*;
@@ -11,7 +16,9 @@ use crate::validators::otp::*;
 fn generate_otp(length: u32) -> String {
     use rand::Rng;
     let mut rng = rand::thread_rng();
-    (0..length).map(|_| rng.gen_range(0..10).to_string()).collect()
+    (0..length)
+        .map(|_| rng.gen_range(0..10).to_string())
+        .collect()
 }
 
 pub async fn send(
@@ -19,42 +26,39 @@ pub async fn send(
     ctx: RequestContext,
     _: GuestOnly,
     Valid(body): Valid<SendOtpRequest>,
-) -> ApiResponse {
-    let user = match User::find_by_email(&body.email).await {
-        Err(e) => return ApiResponse::error("E_DATABASE", e.to_string(), 500),
-        Ok(None) => return ApiResponse::error("E_ROW_NOT_FOUND", "user not found", 404),
-        Ok(Some(u)) => u,
-    };
+) -> Result<ApiResponse, AppError> {
+    let user = User::find_by_email(&body.email)
+        .await?
+        .ok_or_else(|| AppError::NotFound("user not found".into()))?;
 
     let code = generate_otp(state.config.otp_length);
     let hash = rok_auth::hash::sha256_hex(&code);
     let expires_at = chrono::Utc::now() + chrono::Duration::hours(24);
 
-    // Invalidate previous unused tokens.
-    if let Err(e) = sqlx::query(
-        "UPDATE email_verification_tokens SET used_at = now() WHERE user_id = $1 AND used_at IS NULL",
+    // Invalidate previous unused tokens via QueryBuilder DSL.
+    EmailVerificationToken::update_where(
+        ctx.db(),
+        EmailVerificationToken::query()
+            .where_eq("user_id", user.id.clone())
+            .where_null("used_at"),
+        &[("used_at", SqlValue::Text(chrono::Utc::now().to_rfc3339()))],
     )
-    .bind(&user.id)
-    .execute(ctx.db())
-    .await
-    {
-        return ApiResponse::error("E_DATABASE", e.to_string(), 500);
-    }
+    .await?;
 
-    if let Err(e) = sqlx::query(
-        "INSERT INTO email_verification_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)",
-    )
-    .bind(&user.id)
-    .bind(&hash)
-    .bind(expires_at)
-    .execute(ctx.db())
-    .await
-    {
-        return ApiResponse::error("E_DATABASE", e.to_string(), 500);
-    }
+    // Insert new token via pool-free Model DSL.
+    EmailVerificationToken::create(&[
+        (
+            "id",
+            SqlValue::Text(rok_core::crypto::Cuid2::generate().to_string()),
+        ),
+        ("user_id", SqlValue::Text(user.id.clone())),
+        ("token_hash", SqlValue::Text(hash)),
+        ("expires_at", SqlValue::Text(expires_at.to_rfc3339())),
+    ])
+    .await?;
 
     let verify_url = format!(
-        "{}/verify-email?code={}&email={}",
+        "{}/api/v1/otp/verify?code={}&email={}",
         state.config.app_url, code, body.email
     );
 
@@ -66,55 +70,54 @@ pub async fn send(
         tracing::error!("failed to send OTP email: {e}");
     }
 
-    ApiResponse::ok(serde_json::json!({ "message": "verification email sent" }))
+    Ok(ApiResponse::ok(
+        serde_json::json!({ "message": "verification email sent" }),
+    ))
 }
 
 pub async fn verify(
     _state: State<AppState>,
-    ctx: RequestContext,
+    _ctx: RequestContext,
     _: GuestOnly,
     Valid(body): Valid<VerifyOtpRequest>,
-) -> ApiResponse {
-    let user = match User::find_by_email(&body.email).await {
-        Err(e) => return ApiResponse::error("E_DATABASE", e.to_string(), 500),
-        Ok(None) => return ApiResponse::error("E_ROW_NOT_FOUND", "user not found", 404),
-        Ok(Some(u)) => u,
-    };
+) -> Result<ApiResponse, AppError> {
+    let user = User::find_by_email(&body.email)
+        .await?
+        .ok_or_else(|| AppError::NotFound("user not found".into()))?;
 
     let hash = rok_auth::hash::sha256_hex(&body.code);
 
-    let row = match sqlx::query_as::<_, (String,)>(
-        "SELECT id FROM email_verification_tokens
-         WHERE user_id = $1 AND token_hash = $2 AND used_at IS NULL AND expires_at > now()",
+    // Look up valid token via ModelQuery DSL (pool-free).
+    let token = EmailVerificationToken::filter("user_id", SqlValue::Text(user.id.clone()))
+        .and_where("token_hash", SqlValue::Text(hash))
+        .and_where_null("used_at")
+        .and_where_op(
+            "expires_at",
+            ">",
+            SqlValue::Text(chrono::Utc::now().to_rfc3339()),
+        )
+        .first()
+        .await?
+        .ok_or_else(|| AppError::BadRequest("invalid or expired code".into()))?;
+
+    // Mark token as used via pool-free Model DSL.
+    EmailVerificationToken::update_by_pk(
+        token.id,
+        &[("used_at", SqlValue::Text(chrono::Utc::now().to_rfc3339()))],
     )
-    .bind(&user.id)
-    .bind(&hash)
-    .fetch_optional(ctx.db())
-    .await
-    {
-        Err(e) => return ApiResponse::error("E_DATABASE", e.to_string(), 500),
-        Ok(r) => r,
-    };
+    .await?;
 
-    let Some((token_id,)) = row else {
-        return ApiResponse::error("E_INVALID_OTP", "invalid or expired code", 400);
-    };
+    // Mark user email as verified via pool-free Model DSL.
+    User::update_by_pk(
+        user.id,
+        &[(
+            "email_verified_at",
+            SqlValue::Text(chrono::Utc::now().to_rfc3339()),
+        )],
+    )
+    .await?;
 
-    if let Err(e) = sqlx::query("UPDATE email_verification_tokens SET used_at = now() WHERE id = $1")
-        .bind(&token_id)
-        .execute(ctx.db())
-        .await
-    {
-        return ApiResponse::error("E_DATABASE", e.to_string(), 500);
-    }
-
-    if let Err(e) = sqlx::query("UPDATE users SET email_verified_at = now() WHERE id = $1")
-        .bind(&user.id)
-        .execute(ctx.db())
-        .await
-    {
-        return ApiResponse::error("E_DATABASE", e.to_string(), 500);
-    }
-
-    ApiResponse::ok(serde_json::json!({ "message": "email verified" }))
+    Ok(ApiResponse::ok(
+        serde_json::json!({ "message": "email verified" }),
+    ))
 }
