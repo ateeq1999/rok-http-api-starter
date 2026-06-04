@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS device_trust_tokens (
-    id           BIGSERIAL PRIMARY KEY,
-    user_id      BIGINT      NOT NULL,
-    token_hash   TEXT        NOT NULL UNIQUE,
+    id           TEXT PRIMARY KEY,
+    user_id      TEXT   NOT NULL,
+    token_hash   TEXT   NOT NULL UNIQUE,
     device_name  TEXT,
     last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     expires_at   TIMESTAMPTZ NOT NULL,

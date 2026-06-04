@@ -14,13 +14,6 @@ fn generate_otp(length: u32) -> String {
     (0..length).map(|_| rng.gen_range(0..10).to_string()).collect()
 }
 
-fn sha256_hex(input: &str) -> String {
-    use sha2::Digest;
-    let mut hasher = sha2::Sha256::new();
-    hasher.update(input.as_bytes());
-    hex::encode(hasher.finalize())
-}
-
 pub async fn send(
     State(state): State<AppState>,
     ctx: RequestContext,
@@ -34,14 +27,14 @@ pub async fn send(
     };
 
     let code = generate_otp(state.config.otp_length);
-    let hash = sha256_hex(&code);
+    let hash = rok_auth::hash::sha256_hex(&code);
     let expires_at = chrono::Utc::now() + chrono::Duration::hours(24);
 
     // Invalidate previous unused tokens.
     if let Err(e) = sqlx::query(
         "UPDATE email_verification_tokens SET used_at = now() WHERE user_id = $1 AND used_at IS NULL",
     )
-    .bind(user.id)
+    .bind(&user.id)
     .execute(ctx.db())
     .await
     {
@@ -51,7 +44,7 @@ pub async fn send(
     if let Err(e) = sqlx::query(
         "INSERT INTO email_verification_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)",
     )
-    .bind(user.id)
+    .bind(&user.id)
     .bind(&hash)
     .bind(expires_at)
     .execute(ctx.db())
@@ -88,13 +81,13 @@ pub async fn verify(
         Ok(Some(u)) => u,
     };
 
-    let hash = sha256_hex(&body.code);
+    let hash = rok_auth::hash::sha256_hex(&body.code);
 
-    let row = match sqlx::query_as::<_, (i64,)>(
+    let row = match sqlx::query_as::<_, (String,)>(
         "SELECT id FROM email_verification_tokens
          WHERE user_id = $1 AND token_hash = $2 AND used_at IS NULL AND expires_at > now()",
     )
-    .bind(user.id)
+    .bind(&user.id)
     .bind(&hash)
     .fetch_optional(ctx.db())
     .await
@@ -108,7 +101,7 @@ pub async fn verify(
     };
 
     if let Err(e) = sqlx::query("UPDATE email_verification_tokens SET used_at = now() WHERE id = $1")
-        .bind(token_id)
+        .bind(&token_id)
         .execute(ctx.db())
         .await
     {
@@ -116,7 +109,7 @@ pub async fn verify(
     }
 
     if let Err(e) = sqlx::query("UPDATE users SET email_verified_at = now() WHERE id = $1")
-        .bind(user.id)
+        .bind(&user.id)
         .execute(ctx.db())
         .await
     {

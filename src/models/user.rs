@@ -8,7 +8,7 @@ use serde::Serialize;
 #[derive(Debug, Clone, Serialize, sqlx::FromRow, rok_orm::Model)]
 #[rok_orm(table = "users", timestamps)]
 pub struct User {
-    pub id: i64,
+    pub id: String,
     pub email: String,
     #[serde(skip_serializing)]
     pub password_hash: String,
@@ -41,6 +41,7 @@ impl User {
         Self::create_returning(
             pool,
             &[
+                ("id", SqlValue::Text(rok_core::crypto::Cuid2::generate().to_string())),
                 ("email", SqlValue::Text(email.to_lowercase())),
                 ("password_hash", SqlValue::Text(password_hash.into())),
                 ("name", SqlValue::Text(name.into())),
@@ -52,10 +53,10 @@ impl User {
 }
 
 impl UserProvider for User {
-    type Id = i64;
+    type Id = String;
 
     fn user_id(&self) -> Self::Id {
-        self.id
+        self.id.clone()
     }
 
     fn password_hash(&self) -> &str {
@@ -88,7 +89,6 @@ impl UserProvider for User {
     ) -> impl std::future::Future<Output = Result<Option<Self>, AuthError>> + Send {
         let id = id.to_string();
         async move {
-            let id: i64 = id.parse().map_err(|_| AuthError::Internal("invalid user id".into()))?;
             Self::find_by_pk_explicit(pool, id)
                 .await
                 .map_err(|e| AuthError::Internal(e.to_string()))

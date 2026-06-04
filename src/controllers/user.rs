@@ -1,4 +1,5 @@
 use axum::extract::Path;
+use axum::extract::State;
 
 use rok_auth::axum::RequestContext;
 use rok_auth::axum::RequireRole;
@@ -9,6 +10,7 @@ use rok_validate::Valid;
 use crate::error::AppError;
 use crate::guards::Admin;
 use crate::models::User;
+use crate::state::AppState;
 use crate::validators::user::*;
 
 pub async fn index(
@@ -22,9 +24,9 @@ pub async fn index(
 pub async fn show(
     _ctx: RequestContext,
     _: RequireRole<Admin>,
-    Path(id): Path<i64>,
+    Path(id): Path<String>,
 ) -> Result<ApiResponse, AppError> {
-    let user = match User::find_by_pk(id).await? {
+    let user = match User::find_by_pk(id.as_str()).await? {
         Some(u) => u,
         None => return Err(AppError::NotFound("user not found".into())),
     };
@@ -50,10 +52,10 @@ pub async fn store(
 pub async fn update(
     _ctx: RequestContext,
     _: RequireRole<Admin>,
-    Path(id): Path<i64>,
+    Path(id): Path<String>,
     Valid(body): Valid<UpdateUserRequest>,
 ) -> ApiResponse {
-    if User::find_by_pk(id).await.map(|u| u.is_none()).unwrap_or(true) {
+    if User::find_by_pk(id.as_str()).await.map(|u| u.is_none()).unwrap_or(true) {
         return ApiResponse::error("E_ROW_NOT_FOUND", "user not found", 404);
     }
 
@@ -81,9 +83,9 @@ pub async fn update(
 pub async fn destroy(
     _ctx: RequestContext,
     _: RequireRole<Admin>,
-    Path(id): Path<i64>,
+    Path(id): Path<String>,
 ) -> ApiResponse {
-    match User::find_by_pk(id).await {
+    match User::find_by_pk(id.as_str()).await {
         Err(e) => return ApiResponse::error("E_DATABASE", e.to_string(), 500),
         Ok(None) => return ApiResponse::error("E_ROW_NOT_FOUND", "user not found", 404),
         Ok(Some(_)) => {
@@ -96,15 +98,11 @@ pub async fn destroy(
 }
 
 pub async fn me(
+    State(_state): State<AppState>,
     _ctx: RequestContext,
     claims: rok_auth::Claims,
 ) -> ApiResponse {
-    let id: i64 = match claims.sub.parse() {
-        Err(_) => return ApiResponse::error("E_INVALID_TOKEN", "invalid user id in token", 500),
-        Ok(id) => id,
-    };
-
-    match User::find_by_pk(id).await {
+    match User::find_by_pk(claims.sub.as_str()).await {
         Err(e) => ApiResponse::error("E_DATABASE", e.to_string(), 500),
         Ok(None) => ApiResponse::error("E_ROW_NOT_FOUND", "user not found", 404),
         Ok(Some(user)) => ApiResponse::ok(serde_json::json!({ "user": user })),
