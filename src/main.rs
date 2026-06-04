@@ -2,6 +2,7 @@ mod config;
 mod controllers;
 mod error;
 mod guards;
+mod mail;
 mod migrations;
 mod models;
 mod routes;
@@ -38,10 +39,17 @@ async fn main() {
         .expect("failed to run migrations");
 
     let auth = Arc::new(Auth::new(config.auth_config()).expect("Auth secret must not be empty"));
+    let mailer = mail::Mailer::new(
+        &config.smtp_host,
+        config.smtp_port,
+        &config.smtp_from,
+    )
+    .expect("failed to create mailer");
     let app_state = state::AppState {
         pool: pool.clone(),
         auth: auth.clone(),
         config: config,
+        mailer,
     };
 
     let app = routes::app_router()

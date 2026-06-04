@@ -20,3 +20,4 @@ tower-http = { version = "0.6", features = ["cors", "trace"] }
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1"
 async-trait = "0.1"
+lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "builder", "tokio1"] }

@@ -1,3 +1,4 @@
+use axum::extract::State;
 use rok_auth::axum::GuestOnly;
 use rok_auth::axum::RequestContext;
 use rok_auth::{login, register as register_macro, password, AuthError, Claims};
@@ -6,6 +7,7 @@ use rok_orm::PgModel;
 use rok_validate::Valid;
 
 use crate::models::User;
+use crate::state::AppState;
 use crate::validators::auth::*;
 
 pub async fn register(
@@ -57,13 +59,27 @@ pub async fn logout(_ctx: RequestContext, _claims: Claims) -> ApiResponse {
 }
 
 pub async fn forgot_password(
+    State(state): State<AppState>,
     ctx: RequestContext,
     Valid(body): Valid<ForgotPasswordRequest>,
 ) -> ApiResponse {
-    match rok_auth::PasswordReset::issue(ctx.db(), &body.email).await {
-        Err(e) => ApiResponse::error("E_RESET_ISSUE", e.to_string(), 500),
-        Ok(_) => ApiResponse::ok(serde_json::json!({ "message": "reset link sent" })),
+    let reset_result = rok_auth::PasswordReset::issue(ctx.db(), &body.email).await;
+    if let Ok(issued) = reset_result {
+        if let Ok(Some(user)) = User::find_by_email(&body.email).await {
+            let reset_url = format!(
+                "{}/reset-password?token={}",
+                state.config.app_url, issued.plain_token,
+            );
+            if let Err(e) = state
+                .mailer
+                .send_password_reset(&body.email, &user.name, &issued.plain_token, &reset_url)
+                .await
+            {
+                tracing::error!("failed to send password reset email: {e}");
+            }
+        }
     }
+    ApiResponse::ok(serde_json::json!({ "message": "reset link sent" }))
 }
 
 pub async fn reset_password(
