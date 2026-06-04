@@ -17,6 +17,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --release 2>/dev/null || true
 
 COPY src/ src/
+COPY database/ database/
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     touch src/main.rs \
@@ -31,6 +32,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN useradd -m -u 1001 appuser
 WORKDIR /app
 COPY --from=builder /app/target/release/rok-api-start ./
+COPY --from=builder /app/database ./database
 
 RUN chown -R appuser:appuser /app
 USER appuser

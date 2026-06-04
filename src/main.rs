@@ -49,10 +49,10 @@ async fn main() {
         .layer(TraceLayer::new_for_http())
         .with_state(app_state);
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:8080")
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:8080")
         .await
         .expect("failed to bind");
 
-    tracing::info!("server listening on http://127.0.0.1:8080");
+    tracing::info!("server listening on http://0.0.0.0:8080");
     axum::serve(listener, app).await.expect("server error");
 }
