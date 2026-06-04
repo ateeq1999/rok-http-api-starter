@@ -5,6 +5,7 @@ impl RoleMarker for Admin {
     const ROLE: &'static str = "admin";
 }
 
+#[allow(dead_code)]
 pub struct User;
 impl RoleMarker for User {
     const ROLE: &'static str = "user";

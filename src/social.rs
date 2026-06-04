@@ -3,6 +3,7 @@ use axum::response::{IntoResponse, Redirect, Response};
 
 use rok_auth::social::{SocialAuthHooks, SocialError, SocialUser};
 
+#[allow(dead_code)]
 pub struct AppSocialHooks;
 
 #[async_trait]
@@ -11,7 +12,7 @@ impl SocialAuthHooks for AppSocialHooks {
         let email = social_user
             .email
             .ok_or_else(|| SocialError::Hook("email required".into()))?;
-        let name = social_user.name.unwrap_or_else(|| "User".into());
+        let _name = social_user.name.unwrap_or_else(|| "User".into());
 
         tracing::info!("social login: {} ({})", email, social_user.provider);
 

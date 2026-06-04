@@ -8,11 +8,16 @@ pub struct AppConfig {
     pub auth: AuthConfig,
     pub smtp_host: String,
     pub smtp_port: u16,
+    #[allow(dead_code)]
     pub smtp_username: String,
+    #[allow(dead_code)]
     pub smtp_password: String,
     pub smtp_from: String,
+    #[allow(dead_code)]
     pub google_client_id: String,
+    #[allow(dead_code)]
     pub google_client_secret: String,
+    #[allow(dead_code)]
     pub google_redirect_uri: String,
     pub app_url: String,
 }

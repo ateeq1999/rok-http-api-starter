@@ -8,6 +8,7 @@ pub enum AppError {
     Database(String),
     NotFound(String),
     Forbidden(String),
+    #[allow(dead_code)]
     BadRequest(String),
     Internal(String),
 }

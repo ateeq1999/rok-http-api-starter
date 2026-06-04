@@ -18,6 +18,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 
 COPY src/ src/
 COPY database/ database/
+COPY templates/ templates/
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     touch src/main.rs \

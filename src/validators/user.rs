@@ -9,6 +9,7 @@ pub struct CreateUserRequest {
     pub password: String,
     #[validate(required, max = 255)]
     pub name: String,
+    #[allow(dead_code)]
     pub roles: String,
 }
 
