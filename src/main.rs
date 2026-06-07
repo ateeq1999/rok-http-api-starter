@@ -35,6 +35,8 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
+    let _ = dotenvy::dotenv();
+
     let cli = Cli::parse();
 
     match cli.command {
