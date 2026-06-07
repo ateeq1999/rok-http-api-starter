@@ -1,4 +1,5 @@
 mod auth;
+mod cli;
 mod config;
 mod controllers;
 mod db;
@@ -14,40 +15,74 @@ mod social;
 mod state;
 mod validators;
 
+use clap::Parser;
 use sqlx::PgPool;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
+use crate::cli::{Cli, Command, DbCommand};
 use crate::state::AppState;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
         .with(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info".into()),
         )
         .init();
 
+    let cli = Cli::parse();
+
+    match cli.command {
+        None | Some(Command::Server { run_migrations: false }) => {
+            start_server().await?;
+        }
+        Some(Command::Server { run_migrations: true }) => {
+            let config = config::AppConfig::from_env();
+            let pool = PgPool::connect(&config.database_url).await?;
+            migrations::run(&pool).await?;
+            db::init(pool.clone());
+            serve(config, pool).await?;
+        }
+        Some(Command::Db { command }) => {
+            let config = config::AppConfig::from_env();
+            let pool = PgPool::connect(&config.database_url).await?;
+            match command {
+                DbCommand::Migrate => {
+                    migrations::run(&pool).await?;
+                    println!("Migrations complete");
+                }
+                DbCommand::Rollback => {
+                    migrations::rollback(&pool).await?;
+                    println!("Rollback complete");
+                }
+                DbCommand::Status => {
+                    migrations::status(&pool).await?;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn start_server() -> anyhow::Result<()> {
     let config = config::AppConfig::from_env();
-    let pool = PgPool::connect(&config.database_url)
-        .await
-        .expect("failed to connect to database");
-
-    migrations::run(&pool)
-        .await
-        .expect("failed to run migrations");
-
+    let pool = PgPool::connect(&config.database_url).await?;
     db::init(pool.clone());
+    serve(config, pool).await
+}
 
+async fn serve(config: config::AppConfig, pool: PgPool) -> anyhow::Result<()> {
     let mailer = mail::Mailer::new(
         &config.smtp_host,
         config.smtp_port,
         &config.smtp_from,
-    )
-    .expect("failed to create mailer");
+    )?;
 
     let app_state = AppState {
         pool,
@@ -60,10 +95,9 @@ async fn main() {
         .layer(TraceLayer::new_for_http())
         .with_state(app_state);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:8080")
-        .await
-        .expect("failed to bind");
-
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
     tracing::info!("server listening on http://0.0.0.0:8080");
-    axum::serve(listener, app).await.expect("server error");
+    axum::serve(listener, app).await?;
+
+    Ok(())
 }
