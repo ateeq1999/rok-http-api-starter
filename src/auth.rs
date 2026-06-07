@@ -5,7 +5,6 @@ use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use axum::extract::FromRef;
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
-use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use rand::rngs::OsRng;
@@ -13,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+use crate::response::{ApiResponse, ErrorCode};
 use crate::state::AppState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -175,32 +175,12 @@ pub enum AuthRejection {
 
 impl IntoResponse for AuthRejection {
     fn into_response(self) -> Response {
-        let (status, code, msg) = match self {
-            Self::MissingToken => (
-                StatusCode::UNAUTHORIZED,
-                "E_MISSING_TOKEN",
-                "missing authorization header",
-            ),
-            Self::InvalidScheme => (
-                StatusCode::UNAUTHORIZED,
-                "E_INVALID_SCHEME",
-                "invalid authorization scheme, use Bearer",
-            ),
-            Self::InvalidToken => (
-                StatusCode::UNAUTHORIZED,
-                "E_INVALID_TOKEN",
-                "invalid or expired token",
-            ),
-            Self::Forbidden => (
-                StatusCode::FORBIDDEN,
-                "E_FORBIDDEN",
-                "insufficient permissions",
-            ),
+        let (code, msg) = match self {
+            Self::MissingToken => (ErrorCode::Unauthorized, "missing authorization header"),
+            Self::InvalidScheme => (ErrorCode::Unauthorized, "invalid authorization scheme, use Bearer"),
+            Self::InvalidToken => (ErrorCode::Unauthorized, "invalid or expired token"),
+            Self::Forbidden => (ErrorCode::Forbidden, "insufficient permissions"),
         };
-        let body = serde_json::json!({
-            "error": code,
-            "message": msg,
-        });
-        (status, axum::Json(body)).into_response()
+        ApiResponse::error(code, msg).into_response()
     }
 }

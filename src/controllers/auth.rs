@@ -1,12 +1,12 @@
 use axum::extract::State;
 use axum::Json;
-use serde_json::Value;
 
 use crate::auth::{self, AuthUser};
 use crate::db;
 use crate::models::User;
-use crate::response;
-use crate::services::crud::{CrudService, FieldValue};
+use crate::response::{ApiResponse, ErrorCode};
+use crate::services::crud::FieldValue;
+use crate::services::crud::CrudService;
 use crate::state::AppState;
 use crate::validators;
 use crate::validators::auth::*;
@@ -14,17 +14,17 @@ use crate::validators::auth::*;
 pub async fn register(
     State(state): State<AppState>,
     Json(body): Json<RegisterRequest>,
-) -> Result<(axum::http::StatusCode, Json<Value>), validators::ValidationRejection> {
+) -> Result<ApiResponse, validators::ValidationRejection> {
     let body = validators::validate(body)?;
 
     match User::find_by_email(&body.email).await {
-        Ok(Some(_)) => return Ok(response::error("E_DUPLICATE_EMAIL", "email already taken", 409)),
-        Err(e) => return Ok(response::error("E_DATABASE", &e.to_string(), 500)),
+        Ok(Some(_)) => return Ok(ApiResponse::error(ErrorCode::Conflict, "email already taken")),
+        Err(e) => return Ok(ApiResponse::error(ErrorCode::InternalServerError, e.to_string())),
         Ok(None) => {}
     }
 
     let hash = match auth::hash_password(&body.password) {
-        Err(e) => return Ok(response::error("E_REGISTRATION", &e.to_string(), 500)),
+        Err(e) => return Ok(ApiResponse::error(ErrorCode::InternalServerError, e.to_string())),
         Ok(h) => h,
     };
 
@@ -37,7 +37,7 @@ pub async fn register(
     ])
     .await
     {
-        Err(e) => return Ok(response::error("E_DATABASE", &e.to_string(), 500)),
+        Err(e) => return Ok(ApiResponse::error(ErrorCode::InternalServerError, e.to_string())),
         Ok(u) => u,
     };
 
@@ -48,8 +48,8 @@ pub async fn register(
         state.config.token_ttl,
         state.config.refresh_ttl,
     ) {
-        Err(e) => Ok(response::error("E_LOGIN", &e.to_string(), 500)),
-        Ok(tokens) => Ok(response::ok(serde_json::json!({
+        Err(e) => Ok(ApiResponse::error(ErrorCode::InternalServerError, e.to_string())),
+        Ok(tokens) => Ok(ApiResponse::ok(serde_json::json!({
             "access_token": tokens.access_token,
             "refresh_token": tokens.refresh_token,
         }))),
@@ -59,19 +59,19 @@ pub async fn register(
 pub async fn login(
     State(state): State<AppState>,
     Json(body): Json<LoginRequest>,
-) -> Result<(axum::http::StatusCode, Json<Value>), validators::ValidationRejection> {
+) -> Result<ApiResponse, validators::ValidationRejection> {
     let body = validators::validate(body)?;
 
     let user = match User::find_by_email(&body.email).await {
         Ok(Some(u)) => u,
-        Ok(None) => return Ok(response::error("E_LOGIN", "invalid email or password", 401)),
-        Err(e) => return Ok(response::error("E_DATABASE", &e.to_string(), 500)),
+        Ok(None) => return Ok(ApiResponse::error(ErrorCode::Unauthorized, "invalid email or password")),
+        Err(e) => return Ok(ApiResponse::error(ErrorCode::InternalServerError, e.to_string())),
     };
 
     match auth::verify_password(&body.password, &user.password_hash) {
         Ok(true) => {}
-        Ok(false) => return Ok(response::error("E_LOGIN", "invalid email or password", 401)),
-        Err(e) => return Ok(response::error("E_LOGIN", &e.to_string(), 500)),
+        Ok(false) => return Ok(ApiResponse::error(ErrorCode::Unauthorized, "invalid email or password")),
+        Err(e) => return Ok(ApiResponse::error(ErrorCode::InternalServerError, e.to_string())),
     }
 
     match auth::generate_token_pair(
@@ -81,22 +81,22 @@ pub async fn login(
         state.config.token_ttl,
         state.config.refresh_ttl,
     ) {
-        Err(e) => Ok(response::error("E_LOGIN", &e.to_string(), 500)),
-        Ok(tokens) => Ok(response::ok(serde_json::json!({
+        Err(e) => Ok(ApiResponse::error(ErrorCode::InternalServerError, e.to_string())),
+        Ok(tokens) => Ok(ApiResponse::ok(serde_json::json!({
             "access_token": tokens.access_token,
             "refresh_token": tokens.refresh_token,
         }))),
     }
 }
 
-pub async fn logout(_user: AuthUser) -> (axum::http::StatusCode, Json<Value>) {
-    response::ok(serde_json::json!({ "message": "logged out" }))
+pub async fn logout(_user: AuthUser) -> ApiResponse {
+    ApiResponse::ok(serde_json::json!({ "message": "logged out" }))
 }
 
 pub async fn forgot_password(
     State(state): State<AppState>,
     Json(body): Json<ForgotPasswordRequest>,
-) -> Result<(axum::http::StatusCode, Json<Value>), validators::ValidationRejection> {
+) -> Result<ApiResponse, validators::ValidationRejection> {
     let body = validators::validate(body)?;
 
     let user = User::find_by_email(&body.email).await.unwrap_or(None);
@@ -132,12 +132,12 @@ pub async fn forgot_password(
         }
     }
 
-    Ok(response::ok(serde_json::json!({ "message": "reset link sent" })))
+    Ok(ApiResponse::ok(serde_json::json!({ "message": "reset link sent" })))
 }
 
 pub async fn reset_password(
     Json(body): Json<ResetPasswordRequest>,
-) -> Result<(axum::http::StatusCode, Json<Value>), validators::ValidationRejection> {
+) -> Result<ApiResponse, validators::ValidationRejection> {
     let body = validators::validate(body)?;
 
     let token_hash = auth::sha256_hex(&body.token);
@@ -155,22 +155,22 @@ pub async fn reset_password(
 
     let email = match email {
         Some(e) => e,
-        None => return Ok(response::error("E_INVALID_TOKEN", "invalid or expired token", 400)),
+        None => return Ok(ApiResponse::error(ErrorCode::BadRequest, "invalid or expired token")),
     };
 
     let hash = match auth::hash_password(&body.password) {
-        Err(e) => return Ok(response::error("E_HASH", &e.to_string(), 500)),
+        Err(e) => return Ok(ApiResponse::error(ErrorCode::InternalServerError, e.to_string())),
         Ok(h) => h,
     };
 
     let user = match User::find_by_email(&email).await {
         Ok(Some(u)) => u,
-        Ok(None) => return Ok(response::error("E_ROW_NOT_FOUND", "user not found", 404)),
-        Err(e) => return Ok(response::error("E_DATABASE", &e.to_string(), 500)),
+        Ok(None) => return Ok(ApiResponse::error(ErrorCode::NotFound, "user not found")),
+        Err(e) => return Ok(ApiResponse::error(ErrorCode::InternalServerError, e.to_string())),
     };
 
     match User::update(&user.id, &[("password_hash", FieldValue::String(hash))]).await {
-        Err(e) => Ok(response::error("E_UPDATE", &e.to_string(), 500)),
+        Err(e) => Ok(ApiResponse::error(ErrorCode::InternalServerError, e.to_string())),
         Ok(_) => {
             let _ = sqlx::query(
                 "UPDATE password_resets SET used_at = NOW() WHERE token_hash = $1",
@@ -179,7 +179,7 @@ pub async fn reset_password(
             .execute(pool)
             .await;
 
-            Ok(response::ok(serde_json::json!({ "message": "password reset" })))
+            Ok(ApiResponse::ok(serde_json::json!({ "message": "password reset" })))
         }
     }
 }

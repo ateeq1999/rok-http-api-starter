@@ -2,13 +2,11 @@ pub mod auth;
 pub mod otp;
 pub mod user;
 
-use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use serde::de::DeserializeOwned;
 use validator::Validate;
 
-use crate::response::ErrorBody;
+use crate::response::{ApiResponse, ErrorCode};
 
 pub fn validate<T: DeserializeOwned + Validate>(
     body: T,
@@ -24,15 +22,11 @@ pub enum ValidationRejection {
 
 impl IntoResponse for ValidationRejection {
     fn into_response(self) -> Response {
-        let (status, body) = match self {
-            Self::ValidationError(errors) => (
-                StatusCode::UNPROCESSABLE_ENTITY,
-                Json(ErrorBody {
-                    error: "E_VALIDATION".to_string(),
-                    message: errors.to_string(),
-                }),
-            ),
-        };
-        (status, body).into_response()
+        match self {
+            Self::ValidationError(errors) => {
+                ApiResponse::error(ErrorCode::UnprocessableEntity, errors.to_string())
+                    .into_response()
+            }
+        }
     }
 }

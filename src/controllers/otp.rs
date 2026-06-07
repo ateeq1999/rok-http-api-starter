@@ -1,12 +1,11 @@
 use axum::extract::State;
 use axum::Json;
-use serde_json::Value;
 
 use crate::auth;
 use crate::error::AppError;
 use crate::models::EmailVerificationToken;
 use crate::models::User;
-use crate::response;
+use crate::response::ApiResponse;
 use crate::services::crud::{CrudService, FieldValue};
 use crate::state::AppState;
 use crate::validators;
@@ -23,7 +22,7 @@ fn generate_otp(length: u32) -> String {
 pub async fn send(
     State(state): State<AppState>,
     Json(body): Json<SendOtpRequest>,
-) -> Result<(axum::http::StatusCode, Json<Value>), AppError> {
+) -> Result<ApiResponse, AppError> {
     let body =
         validators::validate(body).map_err(|_| AppError::BadRequest("invalid request".into()))?;
 
@@ -58,14 +57,14 @@ pub async fn send(
         tracing::error!("failed to send OTP email: {e}");
     }
 
-    Ok(response::ok(
+    Ok(ApiResponse::ok(
         serde_json::json!({ "message": "verification email sent" }),
     ))
 }
 
 pub async fn verify(
     Json(body): Json<VerifyOtpRequest>,
-) -> Result<(axum::http::StatusCode, Json<Value>), AppError> {
+) -> Result<ApiResponse, AppError> {
     let body =
         validators::validate(body).map_err(|_| AppError::BadRequest("invalid request".into()))?;
 
@@ -83,7 +82,7 @@ pub async fn verify(
 
     User::verify_email(&user.id).await?;
 
-    Ok(response::ok(
+    Ok(ApiResponse::ok(
         serde_json::json!({ "message": "email verified" }),
     ))
 }

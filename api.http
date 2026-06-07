@@ -1,7 +1,7 @@
 ### ─── Variables ───────────────────────────────────────────
 
 @baseUrl = http://localhost:8080/api/v1
-@token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJlM2EzMWVlMC0zMGZkLTRiZDMtYjFkZi1iNjI4OWQxNWMzMmIiLCJleHAiOjE3ODA4NDUyNjQsImlhdCI6MTc4MDg0MTY2NCwicm9sZXMiOiJ1c2VyIn0.LXVvbxrpcO1Bc9JD0u6thyOVj4hnizEr5NoqaVfAI-0
+@token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJlM2EzMWVlMC0zMGZkLTRiZDMtYjFkZi1iNjI4OWQxNWMzMmIiLCJleHAiOjE3ODA4NDc4MjUsImlhdCI6MTc4MDg0NDIyNSwicm9sZXMiOiJ1c2VyIn0.z6-lnuyf4XSlyK6-uWOtcvrVVyMbrtOe7LtaLYyeWRE
 @refreshToken=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIiwidHlwIjoicmVmcmVzaCIsImV4cCI6MTc4MzE1MzE2MywiaWF0IjoxNzgwNTYxMTYzLCJpc3MiOiJheHVtLWFwcCIsImZpZCI6IjBmZGVkODkzLWVlZDItNDAzZC1hMjA2LWRiZTY3OWI4YjNmMSJ9.oJkoTlJdcpw_bV59jaCe1jl9m4R7rGTiPnmA-sY9KgI
 @userId = 1
 
@@ -23,7 +23,7 @@ POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
 {
-  "email": "user@example.com",
+  "email": "admin@example.com",
   "password": "password123"
 }
 
