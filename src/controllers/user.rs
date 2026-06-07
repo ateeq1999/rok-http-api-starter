@@ -1,4 +1,6 @@
+use axum::extract::Multipart;
 use axum::extract::Path;
+use axum::extract::State;
 use axum::Json;
 
 use api_core::crud::FieldValue;
@@ -9,6 +11,8 @@ use crate::auth::AdminOnly;
 use crate::auth::AuthUser;
 use crate::error::AppError;
 use crate::models::User;
+use crate::state::AppState;
+use crate::storage;
 use crate::validators;
 use crate::validators::user::*;
 
@@ -106,4 +110,57 @@ pub async fn me(user: AuthUser) -> Result<ApiResponse, AppError> {
         .await?
         .ok_or_else(|| AppError::NotFound("user not found".into()))?;
     Ok(ApiResponse::ok(serde_json::json!({ "user": user })))
+}
+
+pub async fn upload_avatar(
+    State(state): State<AppState>,
+    user: AuthUser,
+    mut multipart: Multipart,
+) -> Result<ApiResponse, AppError> {
+    let field = multipart
+        .next_field()
+        .await
+        .map_err(|_| AppError::BadRequest("invalid multipart data".into()))?
+        .ok_or_else(|| AppError::BadRequest("no file uploaded".into()))?;
+
+    let mime = field
+        .content_type()
+        .unwrap_or("application/octet-stream")
+        .to_string();
+
+    let data = field
+        .bytes()
+        .await
+        .map_err(|_| AppError::BadRequest("failed to read file data".into()))?;
+
+    if data.is_empty() {
+        return Err(AppError::BadRequest("empty file".into()));
+    }
+
+    if data.len() > 5 * 1024 * 1024 {
+        return Err(AppError::BadRequest("file too large (max 5 MB)".into()));
+    }
+
+    let url = storage::save_avatar(
+        &state.config.storage_dir,
+        &user.user_id,
+        &mime,
+        &data,
+    )
+    .await
+    .map_err(|e| AppError::BadRequest(e))?;
+
+    let old: User = User::find_by_id(&user.user_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("user not found".into()))?;
+
+    if let Some(old_url) = old.avatar_url {
+        storage::delete_avatar(&state.config.storage_dir, &old_url).await;
+    }
+
+    User::update(&user.user_id, &[("avatar_url", FieldValue::String(url.clone()))])
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?;
+
+    Ok(ApiResponse::ok(serde_json::json!({ "avatar_url": url })))
 }

@@ -11,4 +11,5 @@ pub mod response;
 pub mod routes;
 pub mod social;
 pub mod state;
+pub mod storage;
 pub mod validators;

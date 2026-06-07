@@ -13,6 +13,7 @@ pub struct User {
     pub password_hash: String,
     pub name: String,
     pub roles: String,
+    pub avatar_url: Option<String>,
     pub email_verified_at: Option<chrono::DateTime<chrono::Utc>>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,

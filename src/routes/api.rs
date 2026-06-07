@@ -12,6 +12,7 @@ pub fn routes() -> Router<AppState> {
         .route("/users/{id}", put(user::update))
         .route("/users/{id}", delete(user::destroy))
         .route("/me", get(user::me))
+        .route("/me/avatar", post(user::upload_avatar))
         .route("/otp/send", post(otp::send))
         .route("/otp/verify", post(otp::verify))
 }

@@ -5,6 +5,11 @@
 @refreshToken=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIiwidHlwIjoicmVmcmVzaCIsImV4cCI6MTc4MzE1MzE2MywiaWF0IjoxNzgwNTYxMTYzLCJpc3MiOiJheHVtLWFwcCIsImZpZCI6IjBmZGVkODkzLWVlZDItNDAzZC1hMjA2LWRiZTY3OWI4YjNmMSJ9.oJkoTlJdcpw_bV59jaCe1jl9m4R7rGTiPnmA-sY9KgI
 @userId = 1
 
+### ─── Health ──────────────────────────────────────────────
+
+### Health Check
+GET {{baseUrl}}/health
+
 ### ─── Auth ────────────────────────────────────────────────
 
 ### Register
@@ -13,9 +18,8 @@ Content-Type: application/json
 
 {
   "email": "admin@example.com",
-  "password": "password123",
-  "name": "John Doe",
-  "roles": "admin"
+  "password": "Password1!",
+  "name": "John Doe"
 }
 
 ### Login
@@ -24,7 +28,15 @@ Content-Type: application/json
 
 {
   "email": "admin@example.com",
-  "password": "password123"
+  "password": "Password1!"
+}
+
+### Refresh Token
+POST {{baseUrl}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refresh_token": "{{refreshToken}}"
 }
 
 ### Logout
@@ -45,16 +57,45 @@ Content-Type: application/json
 
 {
   "token": "7df305cfcd76d8d981913d6ae52ff2f35477d8ea54d0bd752cf30a352bdfa325",
-  "password": "newpassword123"
+  "password": "Newpassword1!"
 }
 
-### ─── Social Auth (Google) ────────────────────────────────
+### ─── OTP / Email Verification ────────────────────────────
 
-### Google Login (redirects to Google)
-GET {{baseUrl}}/auth/google/authorize
+### Send OTP
+POST {{baseUrl}}/otp/send
+Content-Type: application/json
 
-### Google Callback (redirect from Google)
-GET {{baseUrl}}/auth/google/callback?code=<authorization-code>&state=<state>
+{
+  "email": "user@example.com"
+}
+
+### Verify OTP
+POST {{baseUrl}}/otp/verify
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "code": "850645"
+}
+
+### ─── Profile ─────────────────────────────────────────────
+
+### Get Current User
+GET {{baseUrl}}/me
+Authorization: Bearer {{token}}
+
+### Upload Avatar
+POST {{baseUrl}}/me/avatar
+Authorization: Bearer {{token}}
+Content-Type: multipart/form-data; boundary=----avatar
+
+----avatar
+Content-Disposition: form-data; name="file"; filename="photo.jpg"
+Content-Type: image/jpeg
+
+< ./test-avatar.jpg
+----avatar--
 
 ### ─── User Management (Admin) ─────────────────────────────
 
@@ -69,7 +110,7 @@ Content-Type: application/json
 
 {
   "email": "newuser@example.com",
-  "password": "password123",
+  "password": "Newuser1!",
   "name": "New User",
   "roles": "user"
 }
@@ -92,27 +133,10 @@ Content-Type: application/json
 DELETE {{baseUrl}}/users/{{userId}}
 Authorization: Bearer {{token}}
 
-### ─── Profile ─────────────────────────────────────────────
+### ─── Social Auth (Google) ────────────────────────────────
 
-### Get Current User
-GET {{baseUrl}}/me
-Authorization: Bearer {{token}}
+### Google Login (redirects to Google)
+GET {{baseUrl}}/auth/google/authorize
 
-### ─── OTP / Email Verification ──────────────────────────
-
-### Send OTP
-POST {{baseUrl}}/otp/send
-Content-Type: application/json
-
-{
-  "email": "user@example.com"
-}
-
-### Verify OTP
-POST {{baseUrl}}/otp/verify
-Content-Type: application/json
-
-{
-  "email": "user@example.com",
-  "code": "850645"
-}
+### Google Callback (redirect from Google)
+GET {{baseUrl}}/auth/google/callback?code=<authorization-code>&state=<state>

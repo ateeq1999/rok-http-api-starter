@@ -21,6 +21,7 @@ pub struct AppConfig {
     pub google_redirect_uri: String,
     pub app_url: String,
     pub otp_length: u32,
+    pub storage_dir: String,
 }
 
 impl AppConfig {
@@ -60,6 +61,8 @@ impl AppConfig {
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(6)
                 .clamp(4, 8),
+            storage_dir: std::env::var("STORAGE_DIR")
+                .unwrap_or_else(|_| "./storage".into()),
         }
     }
 }
