@@ -1,26 +1,23 @@
-use std::sync::Arc;
+use axum::extract::FromRef;
 
-use rok_auth::axum::{HasAuth, HasPool};
-use rok_auth::Auth;
-
+use crate::config::AppConfig;
 use crate::mail::Mailer;
 
 #[derive(Clone)]
 pub struct AppState {
     pub pool: sqlx::PgPool,
-    pub auth: Arc<Auth>,
-    pub config: crate::config::AppConfig,
+    pub config: AppConfig,
     pub mailer: Mailer,
 }
 
-impl HasPool for AppState {
-    fn pool(&self) -> &sqlx::PgPool {
-        &self.pool
+impl FromRef<AppState> for AppConfig {
+    fn from_ref(state: &AppState) -> Self {
+        state.config.clone()
     }
 }
 
-impl HasAuth for AppState {
-    fn auth_handle(&self) -> Arc<Auth> {
-        self.auth.clone()
+impl FromRef<AppState> for sqlx::PgPool {
+    fn from_ref(state: &AppState) -> Self {
+        state.pool.clone()
     }
 }

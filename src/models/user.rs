@@ -1,12 +1,9 @@
-use rok_auth::error::AuthError;
-use rok_auth::provider::UserProvider;
-use rok_orm::Model;
-use rok_orm::PgModel;
-use rok_orm::SqlValue;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
 
-#[derive(Debug, Clone, Serialize, sqlx::FromRow, rok_orm::Model)]
-#[rok_orm(table = "users", timestamps)]
+use crate::auth;
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct User {
     pub id: String,
     pub email: String,
@@ -20,15 +17,23 @@ pub struct User {
 }
 
 impl User {
-    pub fn role_list(&self) -> Vec<String> {
-        self.roles.split(',').map(|s| s.trim().to_string()).collect()
+    pub async fn find_by_email(pool: &sqlx::PgPool, email: &str) -> Result<Option<Self>, sqlx::Error> {
+        sqlx::query_as::<_, Self>("SELECT * FROM users WHERE email = $1")
+            .bind(email.to_lowercase())
+            .fetch_optional(pool)
+            .await
     }
 
-    pub async fn find_by_email(
-        email: &str,
-    ) -> Result<Option<Self>, sqlx::Error> {
-        Self::filter("email", SqlValue::Text(email.to_lowercase()))
-            .first()
+    pub async fn find_by_pk(pool: &sqlx::PgPool, id: &str) -> Result<Option<Self>, sqlx::Error> {
+        sqlx::query_as::<_, Self>("SELECT * FROM users WHERE id = $1")
+            .bind(id)
+            .fetch_optional(pool)
+            .await
+    }
+
+    pub async fn all(pool: &sqlx::PgPool) -> Result<Vec<Self>, sqlx::Error> {
+        sqlx::query_as::<_, Self>("SELECT * FROM users ORDER BY created_at DESC")
+            .fetch_all(pool)
             .await
     }
 
@@ -38,60 +43,62 @@ impl User {
         password_hash: &str,
         name: &str,
     ) -> Result<Self, sqlx::Error> {
-        Self::create_returning(
-            pool,
-            &[
-                ("id", SqlValue::Text(rok_core::crypto::Cuid2::generate().to_string())),
-                ("email", SqlValue::Text(email.to_lowercase())),
-                ("password_hash", SqlValue::Text(password_hash.into())),
-                ("name", SqlValue::Text(name.into())),
-                ("roles", SqlValue::Text("user".into())),
-            ],
+        let id = auth::generate_id();
+        sqlx::query_as::<_, Self>(
+            "INSERT INTO users (id, email, password_hash, name, roles) VALUES ($1, $2, $3, $4, $5) RETURNING *",
         )
+        .bind(id)
+        .bind(email.to_lowercase())
+        .bind(password_hash)
+        .bind(name)
+        .bind("user")
+        .fetch_one(pool)
         .await
     }
-}
 
-impl UserProvider for User {
-    type Id = String;
-
-    fn user_id(&self) -> Self::Id {
-        self.id.clone()
-    }
-
-    fn password_hash(&self) -> &str {
-        &self.password_hash
-    }
-
-    fn roles(&self) -> Vec<String> {
-        self.role_list()
-    }
-
-    fn find_by_email(
-        pool: &sqlx::PgPool,
-        email: &str,
-    ) -> impl std::future::Future<Output = Result<Option<Self>, AuthError>> + Send {
-        let email = email.to_lowercase();
-        async move {
-            Self::find_where_explicit(
-                pool,
-                Self::query().where_eq("email", SqlValue::Text(email)),
-            )
-            .await
-            .map(|mut v| v.pop())
-            .map_err(|e| AuthError::Internal(e.to_string()))
-        }
-    }
-
-    fn find_by_id(
+    pub async fn update_by_pk(
         pool: &sqlx::PgPool,
         id: &str,
-    ) -> impl std::future::Future<Output = Result<Option<Self>, AuthError>> + Send {
-        let id = id.to_string();
-        async move {
-            Self::find_by_pk_explicit(pool, id)
-                .await
-                .map_err(|e| AuthError::Internal(e.to_string()))
-        }
+        email: Option<&str>,
+        name: Option<&str>,
+        roles: Option<&str>,
+        password_hash: Option<&str>,
+    ) -> Result<Self, sqlx::Error> {
+        sqlx::query_as::<_, Self>(
+            "UPDATE users SET
+                email = COALESCE($2, email),
+                name = COALESCE($3, name),
+                roles = COALESCE($4, roles),
+                password_hash = COALESCE($5, password_hash),
+                updated_at = NOW()
+             WHERE id = $1
+             RETURNING *",
+        )
+        .bind(id)
+        .bind(email.map(|e| e.to_lowercase()))
+        .bind(name)
+        .bind(roles)
+        .bind(password_hash)
+        .fetch_one(pool)
+        .await
+    }
+
+    pub async fn verify_email(
+        pool: &sqlx::PgPool,
+        id: &str,
+    ) -> Result<Self, sqlx::Error> {
+        sqlx::query_as::<_, Self>(
+            "UPDATE users SET email_verified_at = NOW(), updated_at = NOW() WHERE id = $1 RETURNING *",
+        )
+        .bind(id)
+        .fetch_one(pool)
+        .await
+    }
+
+    pub async fn delete_by_pk(pool: &sqlx::PgPool, id: &str) -> Result<sqlx::postgres::PgQueryResult, sqlx::Error> {
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(id)
+            .execute(pool)
+            .await
     }
 }

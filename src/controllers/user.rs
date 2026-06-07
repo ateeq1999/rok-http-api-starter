@@ -1,110 +1,111 @@
 use axum::extract::Path;
 use axum::extract::State;
+use axum::Json;
+use serde_json::Value;
 
-use rok_auth::axum::RequestContext;
-use rok_auth::axum::RequireRole;
-use rok_core::api::ApiResponse;
-use rok_orm::PgModel;
-use rok_validate::Valid;
-
+use crate::auth::AdminOnly;
+use crate::auth::AuthUser;
 use crate::error::AppError;
-use crate::guards::Admin;
 use crate::models::User;
+use crate::response;
 use crate::state::AppState;
+use crate::validators;
 use crate::validators::user::*;
 
 pub async fn index(
-    _ctx: RequestContext,
-    _: RequireRole<Admin>,
-) -> Result<ApiResponse, AppError> {
-    let users = User::all().await?;
-    Ok(ApiResponse::ok(serde_json::json!({ "users": users })))
+    State(state): State<AppState>,
+    _admin: AdminOnly,
+) -> Result<(axum::http::StatusCode, Json<Value>), AppError> {
+    let users = User::all(&state.pool).await?;
+    Ok(response::ok(serde_json::json!({ "users": users })))
 }
 
 pub async fn show(
-    _ctx: RequestContext,
-    _: RequireRole<Admin>,
+    State(state): State<AppState>,
+    _admin: AdminOnly,
     Path(id): Path<String>,
-) -> Result<ApiResponse, AppError> {
-    let user = match User::find_by_pk(id.as_str()).await? {
-        Some(u) => u,
-        None => return Err(AppError::NotFound("user not found".into())),
-    };
-    Ok(ApiResponse::ok(serde_json::json!({ "user": user })))
+) -> Result<(axum::http::StatusCode, Json<Value>), AppError> {
+    let user = User::find_by_pk(&state.pool, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("user not found".into()))?;
+    Ok(response::ok(serde_json::json!({ "user": user })))
 }
 
 pub async fn store(
-    ctx: RequestContext,
-    _: RequireRole<Admin>,
-    Valid(body): Valid<CreateUserRequest>,
-) -> ApiResponse {
-    let hash = match rok_auth::password::hash_async(body.password.clone()).await {
-        Err(e) => return ApiResponse::error("E_HASH", e.to_string(), 500),
+    State(state): State<AppState>,
+    _admin: AdminOnly,
+    Json(body): Json<CreateUserRequest>,
+) -> Result<(axum::http::StatusCode, Json<Value>), validators::ValidationRejection> {
+    let body = validators::validate(body)?;
+
+    let hash = match crate::auth::hash_password(&body.password) {
+        Err(e) => return Ok(response::error("E_HASH", &e.to_string(), 500)),
         Ok(h) => h,
     };
 
-    match User::create_user(ctx.db(), &body.email, &hash, &body.name).await {
-        Err(e) => ApiResponse::error("E_CREATE", e.to_string(), 500),
-        Ok(user) => ApiResponse::created(serde_json::json!({ "user": user })),
+    match User::create_user(&state.pool, &body.email, &hash, &body.name).await {
+        Err(e) => Ok(response::error("E_CREATE", &e.to_string(), 500)),
+        Ok(user) => Ok(response::created(serde_json::json!({ "user": user }))),
     }
 }
 
 pub async fn update(
-    _ctx: RequestContext,
-    _: RequireRole<Admin>,
+    State(state): State<AppState>,
+    _admin: AdminOnly,
     Path(id): Path<String>,
-    Valid(body): Valid<UpdateUserRequest>,
-) -> ApiResponse {
-    if User::find_by_pk(id.as_str()).await.map(|u| u.is_none()).unwrap_or(true) {
-        return ApiResponse::error("E_ROW_NOT_FOUND", "user not found", 404);
+    Json(body): Json<UpdateUserRequest>,
+) -> Result<(axum::http::StatusCode, Json<Value>), validators::ValidationRejection> {
+    let body = validators::validate(body)?;
+
+    let user = User::find_by_pk(&state.pool, &id)
+        .await
+        .unwrap_or(None);
+
+    if user.is_none() {
+        return Ok(response::error("E_ROW_NOT_FOUND", "user not found", 404));
     }
 
-    let mut updates = Vec::new();
-    if let Some(email) = &body.email {
-        updates.push(("email", rok_orm::SqlValue::Text(email.clone())));
+    match User::update_by_pk(
+        &state.pool,
+        &id,
+        body.email.as_deref(),
+        body.name.as_deref(),
+        body.roles.as_deref(),
+        None,
+    )
+    .await
+    {
+        Err(e) => Ok(response::error("E_UPDATE", &e.to_string(), 500)),
+        Ok(_) => Ok(response::ok(serde_json::json!({ "message": "updated" }))),
     }
-    if let Some(name) = &body.name {
-        updates.push(("name", rok_orm::SqlValue::Text(name.clone())));
-    }
-    if let Some(roles) = &body.roles {
-        updates.push(("roles", rok_orm::SqlValue::Text(roles.clone())));
-    }
-
-    if !updates.is_empty() {
-        match User::update_by_pk(id, &updates).await {
-            Err(e) => return ApiResponse::error("E_UPDATE", e.to_string(), 500),
-            Ok(_) => {}
-        }
-    }
-
-    ApiResponse::ok(serde_json::json!({ "message": "updated" }))
 }
 
 pub async fn destroy(
-    _ctx: RequestContext,
-    _: RequireRole<Admin>,
+    State(state): State<AppState>,
+    _admin: AdminOnly,
     Path(id): Path<String>,
-) -> ApiResponse {
-    match User::find_by_pk(id.as_str()).await {
-        Err(e) => return ApiResponse::error("E_DATABASE", e.to_string(), 500),
-        Ok(None) => return ApiResponse::error("E_ROW_NOT_FOUND", "user not found", 404),
-        Ok(Some(_)) => {
-            match User::delete_by_pk(id).await {
-                Err(e) => ApiResponse::error("E_DELETE", e.to_string(), 500),
-                Ok(_) => ApiResponse::no_content(),
+) -> (axum::http::StatusCode, Json<Value>) {
+    let user = User::find_by_pk(&state.pool, &id).await;
+
+    match user {
+        Err(e) => response::error("E_DATABASE", &e.to_string(), 500),
+        Ok(None) => response::error("E_ROW_NOT_FOUND", "user not found", 404),
+        Ok(Some(_)) => match User::delete_by_pk(&state.pool, &id).await {
+            Err(e) => response::error("E_DELETE", &e.to_string(), 500),
+            Ok(_) => {
+                let status = response::no_content();
+                (status, Json(serde_json::json!({})))
             }
-        }
+        },
     }
 }
 
 pub async fn me(
-    State(_state): State<AppState>,
-    _ctx: RequestContext,
-    claims: rok_auth::Claims,
-) -> ApiResponse {
-    match User::find_by_pk(claims.sub.as_str()).await {
-        Err(e) => ApiResponse::error("E_DATABASE", e.to_string(), 500),
-        Ok(None) => ApiResponse::error("E_ROW_NOT_FOUND", "user not found", 404),
-        Ok(Some(user)) => ApiResponse::ok(serde_json::json!({ "user": user })),
-    }
+    State(state): State<AppState>,
+    user: AuthUser,
+) -> Result<(axum::http::StatusCode, Json<Value>), AppError> {
+    let user = User::find_by_pk(&state.pool, &user.user_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("user not found".into()))?;
+    Ok(response::ok(serde_json::json!({ "user": user })))
 }

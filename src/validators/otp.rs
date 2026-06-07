@@ -1,16 +1,16 @@
-use rok_validate::Validate;
 use serde::Deserialize;
+use validator::Validate;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct SendOtpRequest {
-    #[validate(required, email)]
+    #[validate(email)]
     pub email: String,
 }
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct VerifyOtpRequest {
-    #[validate(required, email)]
+    #[validate(email)]
     pub email: String,
-    #[validate(required)]
+    #[validate(length(min = 1))]
     pub code: String,
 }

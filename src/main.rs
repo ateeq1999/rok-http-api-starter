@@ -1,3 +1,4 @@
+mod auth;
 mod config;
 mod controllers;
 mod error;
@@ -5,20 +6,19 @@ mod guards;
 mod mail;
 mod migrations;
 mod models;
+mod response;
 mod routes;
 mod social;
 mod state;
 mod validators;
 
-use std::sync::Arc;
-
-use rok_auth::Auth;
-use rok_orm::OrmLayer;
 use sqlx::PgPool;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+
+use crate::state::AppState;
 
 #[tokio::main]
 async fn main() {
@@ -38,23 +38,20 @@ async fn main() {
         .await
         .expect("failed to run migrations");
 
-    let auth = Arc::new(Auth::new(config.auth_config()).expect("Auth secret must not be empty"));
     let mailer = mail::Mailer::new(
         &config.smtp_host,
         config.smtp_port,
         &config.smtp_from,
     )
     .expect("failed to create mailer");
-    let app_state = state::AppState {
-        pool: pool.clone(),
-        auth: auth.clone(),
-        config: config,
+
+    let app_state = AppState {
+        pool,
+        config,
         mailer,
     };
 
     let app = routes::app_router()
-        .layer(rok_auth::axum::AuthLayer::new((*auth).clone()))
-        .layer(OrmLayer::new(pool.clone()))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(app_state);

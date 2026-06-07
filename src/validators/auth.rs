@@ -1,34 +1,34 @@
-use rok_validate::Validate;
 use serde::Deserialize;
+use validator::Validate;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct RegisterRequest {
-    #[validate(required, email)]
+    #[validate(email)]
     pub email: String,
-    #[validate(required, min = 8, max = 128)]
+    #[validate(length(min = 8, max = 128))]
     pub password: String,
-    #[validate(required, max = 255)]
+    #[validate(length(min = 1, max = 255))]
     pub name: String,
 }
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct LoginRequest {
-    #[validate(required, email)]
+    #[validate(email)]
     pub email: String,
-    #[validate(required)]
+    #[validate(length(min = 1))]
     pub password: String,
 }
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct ForgotPasswordRequest {
-    #[validate(required, email)]
+    #[validate(email)]
     pub email: String,
 }
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct ResetPasswordRequest {
-    #[validate(required)]
+    #[validate(length(min = 1))]
     pub token: String,
-    #[validate(required, min = 8, max = 128)]
+    #[validate(length(min = 8, max = 128))]
     pub password: String,
 }

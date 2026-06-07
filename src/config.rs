@@ -1,11 +1,11 @@
 use std::time::Duration;
 
-use rok_auth::AuthConfig;
-
 #[derive(Clone)]
 pub struct AppConfig {
     pub database_url: String,
-    pub auth: AuthConfig,
+    pub auth_secret: String,
+    pub token_ttl: Duration,
+    pub refresh_ttl: Duration,
     pub smtp_host: String,
     pub smtp_port: u16,
     #[allow(dead_code)]
@@ -28,24 +28,20 @@ impl AppConfig {
         Self {
             database_url: std::env::var("DATABASE_URL")
                 .unwrap_or_else(|_| "postgres://localhost:5432/axum_app".into()),
-            auth: AuthConfig {
-                secret: std::env::var("AUTH_SECRET")
-                    .unwrap_or_else(|_| "change-me-in-production".into()),
-                token_ttl: Duration::from_secs(
-                    std::env::var("TOKEN_TTL")
-                        .ok()
-                        .and_then(|v| v.parse().ok())
-                        .unwrap_or(3600),
-                ),
-                refresh_ttl: Duration::from_secs(
-                    std::env::var("REFRESH_TTL")
-                        .ok()
-                        .and_then(|v| v.parse().ok())
-                        .unwrap_or(86400 * 30),
-                ),
-                issuer: Some("axum-app".into()),
-                ..Default::default()
-            },
+            auth_secret: std::env::var("AUTH_SECRET")
+                .unwrap_or_else(|_| "change-me-in-production".into()),
+            token_ttl: Duration::from_secs(
+                std::env::var("TOKEN_TTL")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(3600),
+            ),
+            refresh_ttl: Duration::from_secs(
+                std::env::var("REFRESH_TTL")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(86400 * 30),
+            ),
             smtp_host: std::env::var("SMTP_HOST").unwrap_or_else(|_| "localhost".into()),
             smtp_port: std::env::var("SMTP_PORT")
                 .ok()
@@ -65,9 +61,5 @@ impl AppConfig {
                 .unwrap_or(6)
                 .clamp(4, 8),
         }
-    }
-
-    pub fn auth_config(&self) -> AuthConfig {
-        self.auth.clone()
     }
 }

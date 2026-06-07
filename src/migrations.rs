@@ -1,9 +1,9 @@
-use rok_orm::{FileSource, MigrationRunner};
+use sqlx::migrate::Migrator;
 use sqlx::PgPool;
 
 pub async fn run(pool: &PgPool) -> anyhow::Result<()> {
-    MigrationRunner::new(pool.clone())
-        .source(FileSource::new("./database/migrations"))
-        .run()
-        .await
+    let migrator = Migrator::new(std::path::Path::new("./database/migrations"))
+        .await?;
+    migrator.run(pool).await?;
+    Ok(())
 }
