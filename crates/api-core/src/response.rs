@@ -36,6 +36,22 @@ impl ApiResponse {
         });
         Self { status: code.status(), body }
     }
+
+    pub fn paginated(data: Value, total: i64, page: i64, per_page: i64) -> Self {
+        let total_pages = (total as f64 / per_page as f64).ceil() as i64;
+        Self {
+            status: StatusCode::OK,
+            body: serde_json::json!({
+                "data": data,
+                "pagination": {
+                    "total": total,
+                    "page": page,
+                    "per_page": per_page,
+                    "total_pages": total_pages,
+                }
+            }),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

@@ -13,6 +13,60 @@ use crate::state::AppState;
 use crate::validators;
 use crate::validators::auth::*;
 
+pub async fn refresh(
+    State(state): State<AppState>,
+    Json(body): Json<RefreshRequest>,
+) -> Result<ApiResponse, validators::ValidationRejection> {
+    let body = validators::validate(body)?;
+
+    let claims = match auth::verify_token(&body.refresh_token, &state.config.auth_secret) {
+        Ok(c) => c,
+        Err(_) => return Ok(ApiResponse::error(ErrorCode::Unauthorized, "invalid or expired refresh token")),
+    };
+
+    let token_hash = auth::sha256_hex(&body.refresh_token);
+
+    let already_used: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM refresh_token_used WHERE token_hash = $1)",
+    )
+    .bind(&token_hash)
+    .fetch_one(db::pool())
+    .await
+    .unwrap_or(false);
+
+    if already_used {
+        return Ok(ApiResponse::error(ErrorCode::Unauthorized, "refresh token already used"));
+    }
+
+    let _ = sqlx::query(
+        "INSERT INTO refresh_token_used (id, token_hash) VALUES ($1, $2)",
+    )
+    .bind(auth::generate_id())
+    .bind(&token_hash)
+    .execute(db::pool())
+    .await;
+
+    let user = match User::find_by_id(&claims.sub).await {
+        Ok(Some(u)) => u,
+        Ok(None) => return Ok(ApiResponse::error(ErrorCode::Unauthorized, "user not found")),
+        Err(_) => return Ok(ApiResponse::error(ErrorCode::InternalServerError, "database error")),
+    };
+
+    match auth::generate_token_pair(
+        &user.id,
+        &user.roles,
+        &state.config.auth_secret,
+        state.config.token_ttl,
+        state.config.refresh_ttl,
+    ) {
+        Err(_) => Ok(ApiResponse::error(ErrorCode::InternalServerError, "token generation failed")),
+        Ok(tokens) => Ok(ApiResponse::ok(serde_json::json!({
+            "access_token": tokens.access_token,
+            "refresh_token": tokens.refresh_token,
+        }))),
+    }
+}
+
 pub async fn register(
     State(state): State<AppState>,
     Json(body): Json<RegisterRequest>,

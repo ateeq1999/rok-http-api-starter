@@ -1,18 +1,3 @@
-mod auth;
-mod cli;
-mod config;
-mod controllers;
-mod db;
-mod error;
-mod guards;
-mod mail;
-mod models;
-mod response;
-mod routes;
-mod social;
-mod state;
-mod validators;
-
 use clap::Parser;
 use sqlx::PgPool;
 use tower_http::cors::CorsLayer;
@@ -20,8 +5,12 @@ use tower_http::trace::TraceLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
-use crate::cli::{Cli, Command, DbCommand};
-use crate::state::AppState;
+use rok_api_start::cli::{Cli, Command, DbCommand};
+use rok_api_start::config;
+use rok_api_start::db;
+use rok_api_start::mail;
+use rok_api_start::routes;
+use rok_api_start::state::AppState;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

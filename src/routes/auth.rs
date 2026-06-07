@@ -9,6 +9,7 @@ pub fn routes() -> Router<AppState> {
         .route("/register", post(auth::register))
         .route("/login", post(auth::login))
         .route("/logout", post(auth::logout))
+        .route("/refresh", post(auth::refresh))
         .route("/forgot-password", post(auth::forgot_password))
         .route("/reset-password", post(auth::reset_password))
 }
