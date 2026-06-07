@@ -18,7 +18,7 @@ Remove all `rok-*` crate dependencies, replacing with pure **axum** + **sqlx** (
 - `sha2` — SHA-256 hashing for tokens & OTP codes
 - `uuid` — ID generation (replace rok-core's Cuid2)
 - `validator` — derive-based request validation (replace rok-validate)
-- `password-auth` — argon2 password hashing (replace rok-auth::password)
+- `argon2` — password hashing
 - `base64` — for token encoding
 - `rand` — already present, keep for OTP generation
 
