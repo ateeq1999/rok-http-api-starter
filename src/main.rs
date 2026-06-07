@@ -58,7 +58,12 @@ async fn main() -> anyhow::Result<()> {
                 }
                 DbCommand::Rollback => {
                     migrations::rollback(&pool).await?;
-                    println!("Rollback complete");
+                }
+                DbCommand::Fresh => {
+                    migrations::fresh(&pool).await?;
+                }
+                DbCommand::Refresh => {
+                    migrations::refresh(&pool).await?;
                 }
                 DbCommand::Status => {
                     migrations::status(&pool).await?;

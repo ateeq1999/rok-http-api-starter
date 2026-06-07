@@ -27,7 +27,7 @@ impl AppConfig {
     pub fn from_env() -> Self {
         Self {
             database_url: std::env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "postgres://localhost:5432/axum_app".into()),
+                .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/axum_app".into()),
             auth_secret: std::env::var("AUTH_SECRET")
                 .unwrap_or_else(|_| "change-me-in-production".into()),
             token_ttl: Duration::from_secs(
