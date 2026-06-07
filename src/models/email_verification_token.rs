@@ -1,8 +1,9 @@
+use api_core::crud::CrudService;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use sqlx::PgPool;
 
 use crate::db;
-use crate::services::crud::CrudService;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct EmailVerificationToken {
@@ -16,6 +17,10 @@ pub struct EmailVerificationToken {
 
 impl CrudService for EmailVerificationToken {
     const TABLE: &'static str = "email_verification_tokens";
+
+    fn pool() -> &'static PgPool {
+        db::pool()
+    }
 }
 
 impl EmailVerificationToken {
@@ -23,7 +28,6 @@ impl EmailVerificationToken {
         user_id: &str,
         token_hash: &str,
     ) -> Result<Option<Self>, sqlx::Error> {
-        let pool = db::pool();
         sqlx::query_as::<_, Self>(
             "SELECT * FROM email_verification_tokens
              WHERE user_id = $1
@@ -34,30 +38,28 @@ impl EmailVerificationToken {
         )
         .bind(user_id)
         .bind(token_hash)
-        .fetch_optional(pool)
+        .fetch_optional(db::pool())
         .await
     }
 
     pub async fn mark_used(id: &str) -> Result<Self, sqlx::Error> {
-        let pool = db::pool();
         sqlx::query_as::<_, Self>(
             "UPDATE email_verification_tokens SET used_at = NOW() WHERE id = $1 RETURNING *",
         )
         .bind(id)
-        .fetch_one(pool)
+        .fetch_one(db::pool())
         .await
     }
 
     pub async fn invalidate_previous(
         user_id: &str,
     ) -> Result<sqlx::postgres::PgQueryResult, sqlx::Error> {
-        let pool = db::pool();
         sqlx::query(
             "UPDATE email_verification_tokens SET used_at = NOW()
              WHERE user_id = $1 AND used_at IS NULL",
         )
         .bind(user_id)
-        .execute(pool)
+        .execute(db::pool())
         .await
     }
 }

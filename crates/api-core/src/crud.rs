@@ -1,9 +1,7 @@
 use async_trait::async_trait;
 use sqlx::postgres::PgRow;
+use sqlx::PgPool;
 use sqlx::FromRow;
-
-use crate::db;
-use crate::error::AppError;
 
 #[derive(Debug, Clone)]
 pub enum FieldValue {
@@ -59,27 +57,23 @@ pub trait CrudService: Sized + for<'r> FromRow<'r, PgRow> + Send + Sync + Unpin 
     const TABLE: &'static str;
     const PK: &'static str = "id";
 
-    async fn find_by_id(id: &str) -> Result<Option<Self>, sqlx::Error> {
-        let pool = db::pool();
-        let sql = format!("SELECT * FROM {} WHERE {} = $1", Self::TABLE, Self::PK);
-        sqlx::query_as::<_, Self>(&sql).bind(id).fetch_optional(pool).await
-    }
+    fn pool() -> &'static PgPool;
 
-    async fn find_or_fail(id: &str) -> Result<Self, AppError> {
-        Self::find_by_id(id)
-            .await?
-            .ok_or_else(|| AppError::NotFound(format!("{} not found", Self::TABLE)))
+    async fn find_by_id(id: &str) -> Result<Option<Self>, sqlx::Error> {
+        let sql = format!("SELECT * FROM {} WHERE {} = $1", Self::TABLE, Self::PK);
+        sqlx::query_as::<_, Self>(&sql)
+            .bind(id)
+            .fetch_optional(Self::pool())
+            .await
     }
 
     async fn all() -> Result<Vec<Self>, sqlx::Error> {
-        let pool = db::pool();
         let sql = format!("SELECT * FROM {}", Self::TABLE);
-        sqlx::query_as::<_, Self>(&sql).fetch_all(pool).await
+        sqlx::query_as::<_, Self>(&sql).fetch_all(Self::pool()).await
     }
 
     #[allow(dead_code)]
     async fn paginate(page: i64, limit: i64) -> Result<(Vec<Self>, i64), sqlx::Error> {
-        let pool = db::pool();
         let offset = (page - 1).max(0) * limit;
         let sql = format!(
             "SELECT * FROM {} ORDER BY {} LIMIT $1 OFFSET $2",
@@ -87,24 +81,22 @@ pub trait CrudService: Sized + for<'r> FromRow<'r, PgRow> + Send + Sync + Unpin 
             Self::PK
         );
         let count_sql = format!("SELECT COUNT(*) FROM {}", Self::TABLE);
-        let total: (i64,) = sqlx::query_as(&count_sql).fetch_one(pool).await?;
+        let total: (i64,) = sqlx::query_as(&count_sql).fetch_one(Self::pool()).await?;
         let items = sqlx::query_as::<_, Self>(&sql)
             .bind(limit)
             .bind(offset)
-            .fetch_all(pool)
+            .fetch_all(Self::pool())
             .await?;
         Ok((items, total.0))
     }
 
     async fn delete(id: &str) -> Result<bool, sqlx::Error> {
-        let pool = db::pool();
         let sql = format!("DELETE FROM {} WHERE {} = $1", Self::TABLE, Self::PK);
-        let result = sqlx::query(&sql).bind(id).execute(pool).await?;
+        let result = sqlx::query(&sql).bind(id).execute(Self::pool()).await?;
         Ok(result.rows_affected() > 0)
     }
 
     async fn create(fields: &[(&str, FieldValue)]) -> Result<Self, sqlx::Error> {
-        let pool = db::pool();
         let cols: Vec<&str> = fields.iter().map(|(c, _)| *c).collect();
         let params: Vec<String> = (1..=fields.len()).map(|i| format!("${}", i)).collect();
         let sql = format!(
@@ -126,11 +118,10 @@ pub trait CrudService: Sized + for<'r> FromRow<'r, PgRow> + Send + Sync + Unpin 
                 FieldValue::Null => query = query.bind(None::<&str>),
             }
         }
-        query.fetch_one(pool).await
+        query.fetch_one(Self::pool()).await
     }
 
     async fn update(id: &str, fields: &[(&str, FieldValue)]) -> Result<Self, sqlx::Error> {
-        let pool = db::pool();
         let sets: Vec<String> = fields
             .iter()
             .enumerate()
@@ -155,6 +146,6 @@ pub trait CrudService: Sized + for<'r> FromRow<'r, PgRow> + Send + Sync + Unpin 
                 FieldValue::Null => query = query.bind(None::<&str>),
             }
         }
-        query.fetch_one(pool).await
+        query.fetch_one(Self::pool()).await
     }
 }

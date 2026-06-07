@@ -1,12 +1,14 @@
 use axum::extract::State;
 use axum::Json;
 
-use crate::auth::{self, AuthUser};
+use api_core::auth;
+use api_core::crud::FieldValue;
+use api_core::crud::CrudService;
+use api_core::response::{ApiResponse, ErrorCode};
+
+use crate::auth::AuthUser;
 use crate::db;
 use crate::models::User;
-use crate::response::{ApiResponse, ErrorCode};
-use crate::services::crud::FieldValue;
-use crate::services::crud::CrudService;
 use crate::state::AppState;
 use crate::validators;
 use crate::validators::auth::*;
@@ -106,7 +108,6 @@ pub async fn forgot_password(
         let token_hash = auth::sha256_hex(&plain_token);
         let expires_at = chrono::Utc::now() + chrono::Duration::hours(1);
 
-        let pool = db::pool();
         let result = sqlx::query(
             "INSERT INTO password_resets (id, email, token_hash, expires_at) VALUES ($1, $2, $3, $4)",
         )
@@ -114,7 +115,7 @@ pub async fn forgot_password(
         .bind(&user.email)
         .bind(&token_hash)
         .bind(expires_at)
-        .execute(pool)
+        .execute(db::pool())
         .await;
 
         if let Ok(_) = result {
@@ -142,14 +143,13 @@ pub async fn reset_password(
 
     let token_hash = auth::sha256_hex(&body.token);
 
-    let pool = db::pool();
     let email: Option<String> = sqlx::query_scalar(
         "SELECT email FROM password_resets
          WHERE token_hash = $1 AND used_at IS NULL AND expires_at > NOW()
          LIMIT 1",
     )
     .bind(&token_hash)
-    .fetch_optional(pool)
+    .fetch_optional(db::pool())
     .await
     .unwrap_or(None);
 
@@ -176,7 +176,7 @@ pub async fn reset_password(
                 "UPDATE password_resets SET used_at = NOW() WHERE token_hash = $1",
             )
             .bind(&token_hash)
-            .execute(pool)
+            .execute(db::pool())
             .await;
 
             Ok(ApiResponse::ok(serde_json::json!({ "message": "password reset" })))

@@ -1,12 +1,14 @@
 use axum::extract::Path;
 use axum::Json;
 
+use api_core::crud::FieldValue;
+use api_core::crud::CrudService;
+use api_core::response::{ApiResponse, ErrorCode};
+
 use crate::auth::AdminOnly;
 use crate::auth::AuthUser;
 use crate::error::AppError;
 use crate::models::User;
-use crate::response::{ApiResponse, ErrorCode};
-use crate::services::crud::{CrudService, FieldValue};
 use crate::validators;
 use crate::validators::user::*;
 
@@ -19,7 +21,9 @@ pub async fn show(
     _admin: AdminOnly,
     Path(id): Path<String>,
 ) -> Result<ApiResponse, AppError> {
-    let user = User::find_or_fail(&id).await?;
+    let user = User::find_by_id(&id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("user not found".into()))?;
     Ok(ApiResponse::ok(serde_json::json!({ "user": user })))
 }
 
@@ -29,13 +33,13 @@ pub async fn store(
 ) -> Result<ApiResponse, validators::ValidationRejection> {
     let body = validators::validate(body)?;
 
-    let hash = match crate::auth::hash_password(&body.password) {
+    let hash = match api_core::auth::hash_password(&body.password) {
         Err(e) => return Ok(ApiResponse::error(ErrorCode::InternalServerError, e.to_string())),
         Ok(h) => h,
     };
 
     match User::create(&[
-        ("id", FieldValue::String(crate::auth::generate_id())),
+        ("id", FieldValue::String(api_core::auth::generate_id())),
         ("email", FieldValue::String(body.email.to_lowercase())),
         ("password_hash", FieldValue::String(hash)),
         ("name", FieldValue::String(body.name)),
@@ -98,6 +102,8 @@ pub async fn destroy(
 }
 
 pub async fn me(user: AuthUser) -> Result<ApiResponse, AppError> {
-    let user = User::find_or_fail(&user.user_id).await?;
+    let user = User::find_by_id(&user.user_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("user not found".into()))?;
     Ok(ApiResponse::ok(serde_json::json!({ "user": user })))
 }

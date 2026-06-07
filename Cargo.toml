@@ -1,3 +1,7 @@
+[workspace]
+resolver = "2"
+members = [".", "crates/api-core"]
+
 [package]
 name = "rok-api-start"
 version = "0.6.1"
@@ -5,6 +9,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
+api-core = { path = "crates/api-core" }
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
@@ -15,14 +20,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1"
-async-trait = "0.1"
 lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "builder", "tokio1"] }
-jsonwebtoken = "9"
-sha2 = "0.10"
-uuid = { version = "1", features = ["v4"] }
-validator = { version = "0.19", features = ["derive"] }
-argon2 = "0.5"
-rand = "0.8"
 clap = { version = "4", features = ["derive"] }
 dotenvy = "0.15"
-
+rand = "0.8"
+validator = { version = "0.19", features = ["derive"] }

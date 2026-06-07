@@ -83,6 +83,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
+name = "api-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "argon2",
+ "async-trait",
+ "axum",
+ "chrono",
+ "jsonwebtoken",
+ "rand",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "uuid",
+ "validator",
+]
+
+[[package]]
 name = "argon2"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1625,24 +1644,20 @@ name = "rok-api-start"
 version = "0.6.1"
 dependencies = [
  "anyhow",
- "argon2",
- "async-trait",
+ "api-core",
  "axum",
  "chrono",
  "clap",
  "dotenvy",
- "jsonwebtoken",
  "lettre",
  "rand",
  "serde",
  "serde_json",
- "sha2",
  "sqlx",
  "tokio",
  "tower-http",
  "tracing",
  "tracing-subscriber",
- "uuid",
  "validator",
 ]
 

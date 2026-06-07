@@ -1,12 +1,14 @@
 use axum::extract::State;
 use axum::Json;
 
-use crate::auth;
+use api_core::auth;
+use api_core::crud::FieldValue;
+use api_core::crud::CrudService;
+use api_core::response::ApiResponse;
+
 use crate::error::AppError;
 use crate::models::EmailVerificationToken;
 use crate::models::User;
-use crate::response::ApiResponse;
-use crate::services::crud::{CrudService, FieldValue};
 use crate::state::AppState;
 use crate::validators;
 use crate::validators::otp::*;

@@ -6,11 +6,9 @@ mod db;
 mod error;
 mod guards;
 mod mail;
-mod migrations;
 mod models;
 mod response;
 mod routes;
-mod services;
 mod social;
 mod state;
 mod validators;
@@ -36,7 +34,6 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let _ = dotenvy::dotenv();
-
     let cli = Cli::parse();
 
     match cli.command {
@@ -46,7 +43,7 @@ async fn main() -> anyhow::Result<()> {
         Some(Command::Server { run_migrations: true }) => {
             let config = config::AppConfig::from_env();
             let pool = PgPool::connect(&config.database_url).await?;
-            migrations::run(&pool).await?;
+            api_core::migrations::run(&pool).await?;
             db::init(pool.clone());
             serve(config, pool).await?;
         }
@@ -55,20 +52,20 @@ async fn main() -> anyhow::Result<()> {
             let pool = PgPool::connect(&config.database_url).await?;
             match command {
                 DbCommand::Migrate => {
-                    migrations::run(&pool).await?;
+                    api_core::migrations::run(&pool).await?;
                     println!("Migrations complete");
                 }
                 DbCommand::Rollback => {
-                    migrations::rollback(&pool).await?;
+                    api_core::migrations::rollback(&pool).await?;
                 }
                 DbCommand::Fresh => {
-                    migrations::fresh(&pool).await?;
+                    api_core::migrations::fresh(&pool).await?;
                 }
                 DbCommand::Refresh => {
-                    migrations::refresh(&pool).await?;
+                    api_core::migrations::refresh(&pool).await?;
                 }
                 DbCommand::Status => {
-                    migrations::status(&pool).await?;
+                    api_core::migrations::status(&pool).await?;
                 }
             }
         }
