@@ -1,2 +1,13 @@
 target/
 .env
+db.sqlite
+database.db
+**/.DS_Store
+# app data
+data/*
+!data/.gitkeep
+# Uploaded files (keep directory structure)
+public/uploads/*
+!public/uploads/.gitkeep
+.codegraph
+docs/
