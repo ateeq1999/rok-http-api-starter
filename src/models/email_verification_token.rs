@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
-use crate::auth;
+use crate::services::crud::CrudService;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct EmailVerificationToken {
@@ -13,25 +13,11 @@ pub struct EmailVerificationToken {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-impl EmailVerificationToken {
-    pub async fn create(
-        pool: &sqlx::PgPool,
-        user_id: &str,
-        token_hash: &str,
-        expires_at: &chrono::DateTime<chrono::Utc>,
-    ) -> Result<Self, sqlx::Error> {
-        let id = auth::generate_id();
-        sqlx::query_as::<_, Self>(
-            "INSERT INTO email_verification_tokens (id, user_id, token_hash, expires_at) VALUES ($1, $2, $3, $4) RETURNING *",
-        )
-        .bind(id)
-        .bind(user_id)
-        .bind(token_hash)
-        .bind(expires_at)
-        .fetch_one(pool)
-        .await
-    }
+impl CrudService for EmailVerificationToken {
+    const TABLE: &'static str = "email_verification_tokens";
+}
 
+impl EmailVerificationToken {
     pub async fn find_valid(
         pool: &sqlx::PgPool,
         user_id: &str,

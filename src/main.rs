@@ -8,6 +8,7 @@ mod migrations;
 mod models;
 mod response;
 mod routes;
+mod services;
 mod social;
 mod state;
 mod validators;

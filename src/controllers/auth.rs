@@ -5,9 +5,10 @@ use serde_json::Value;
 use crate::auth::{self, AuthUser};
 use crate::models::User;
 use crate::response;
+use crate::services::crud::{CrudService, FieldValue};
 use crate::state::AppState;
-use crate::validators::auth::*;
 use crate::validators;
+use crate::validators::auth::*;
 
 pub async fn register(
     State(state): State<AppState>,
@@ -26,7 +27,18 @@ pub async fn register(
         Ok(h) => h,
     };
 
-    let user = match User::create_user(&state.pool, &body.email, &hash, &body.name).await {
+    let user = match User::create(
+        &state.pool,
+        &[
+            ("id", FieldValue::String(auth::generate_id())),
+            ("email", FieldValue::String(body.email.to_lowercase())),
+            ("password_hash", FieldValue::String(hash)),
+            ("name", FieldValue::String(body.name.clone())),
+            ("roles", FieldValue::String("user".to_string())),
+        ],
+    )
+    .await
+    {
         Err(e) => return Ok(response::error("E_DATABASE", &e.to_string(), 500)),
         Ok(u) => u,
     };
@@ -160,7 +172,13 @@ pub async fn reset_password(
         Err(e) => return Ok(response::error("E_DATABASE", &e.to_string(), 500)),
     };
 
-    match User::update_by_pk(&state.pool, &user.id, None, None, None, Some(&hash)).await {
+    match User::update(
+        &state.pool,
+        &user.id,
+        &[("password_hash", FieldValue::String(hash))],
+    )
+    .await
+    {
         Err(e) => Ok(response::error("E_UPDATE", &e.to_string(), 500)),
         Ok(_) => {
             let _ = sqlx::query(

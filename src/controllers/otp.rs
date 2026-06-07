@@ -7,6 +7,7 @@ use crate::error::AppError;
 use crate::models::EmailVerificationToken;
 use crate::models::User;
 use crate::response;
+use crate::services::crud::{CrudService, FieldValue};
 use crate::state::AppState;
 use crate::validators;
 use crate::validators::otp::*;
@@ -23,7 +24,8 @@ pub async fn send(
     State(state): State<AppState>,
     Json(body): Json<SendOtpRequest>,
 ) -> Result<(axum::http::StatusCode, Json<Value>), AppError> {
-    let body = validators::validate(body).map_err(|_| AppError::BadRequest("invalid request".into()))?;
+    let body =
+        validators::validate(body).map_err(|_| AppError::BadRequest("invalid request".into()))?;
 
     let user = User::find_by_email(&state.pool, &body.email)
         .await?
@@ -35,7 +37,16 @@ pub async fn send(
 
     EmailVerificationToken::invalidate_previous(&state.pool, &user.id).await?;
 
-    EmailVerificationToken::create(&state.pool, &user.id, &hash, &expires_at).await?;
+    EmailVerificationToken::create(
+        &state.pool,
+        &[
+            ("id", FieldValue::String(auth::generate_id())),
+            ("user_id", FieldValue::String(user.id.clone())),
+            ("token_hash", FieldValue::String(hash)),
+            ("expires_at", FieldValue::DateTime(expires_at)),
+        ],
+    )
+    .await?;
 
     let verify_url = format!(
         "{}/api/v1/otp/verify?code={}&email={}",
@@ -59,7 +70,8 @@ pub async fn verify(
     State(state): State<AppState>,
     Json(body): Json<VerifyOtpRequest>,
 ) -> Result<(axum::http::StatusCode, Json<Value>), AppError> {
-    let body = validators::validate(body).map_err(|_| AppError::BadRequest("invalid request".into()))?;
+    let body =
+        validators::validate(body).map_err(|_| AppError::BadRequest("invalid request".into()))?;
 
     let user = User::find_by_email(&state.pool, &body.email)
         .await?
