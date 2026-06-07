@@ -1,5 +1,4 @@
 use axum::extract::Path;
-use axum::extract::State;
 use axum::Json;
 use serde_json::Value;
 
@@ -9,29 +8,25 @@ use crate::error::AppError;
 use crate::models::User;
 use crate::response;
 use crate::services::crud::{CrudService, FieldValue};
-use crate::state::AppState;
 use crate::validators;
 use crate::validators::user::*;
 
 pub async fn index(
-    State(state): State<AppState>,
     _admin: AdminOnly,
 ) -> Result<(axum::http::StatusCode, Json<Value>), AppError> {
-    let users = User::all(&state.pool).await?;
+    let users = User::all().await?;
     Ok(response::ok(serde_json::json!({ "users": users })))
 }
 
 pub async fn show(
-    State(state): State<AppState>,
     _admin: AdminOnly,
     Path(id): Path<String>,
 ) -> Result<(axum::http::StatusCode, Json<Value>), AppError> {
-    let user = User::find_or_fail(&state.pool, &id).await?;
+    let user = User::find_or_fail(&id).await?;
     Ok(response::ok(serde_json::json!({ "user": user })))
 }
 
 pub async fn store(
-    State(state): State<AppState>,
     _admin: AdminOnly,
     Json(body): Json<CreateUserRequest>,
 ) -> Result<(axum::http::StatusCode, Json<Value>), validators::ValidationRejection> {
@@ -42,16 +37,13 @@ pub async fn store(
         Ok(h) => h,
     };
 
-    match User::create(
-        &state.pool,
-        &[
-            ("id", FieldValue::String(crate::auth::generate_id())),
-            ("email", FieldValue::String(body.email.to_lowercase())),
-            ("password_hash", FieldValue::String(hash)),
-            ("name", FieldValue::String(body.name)),
-            ("roles", FieldValue::String(body.roles)),
-        ],
-    )
+    match User::create(&[
+        ("id", FieldValue::String(crate::auth::generate_id())),
+        ("email", FieldValue::String(body.email.to_lowercase())),
+        ("password_hash", FieldValue::String(hash)),
+        ("name", FieldValue::String(body.name)),
+        ("roles", FieldValue::String(body.roles)),
+    ])
     .await
     {
         Err(e) => Ok(response::error("E_CREATE", &e.to_string(), 500)),
@@ -60,17 +52,13 @@ pub async fn store(
 }
 
 pub async fn update(
-    State(state): State<AppState>,
     _admin: AdminOnly,
     Path(id): Path<String>,
     Json(body): Json<UpdateUserRequest>,
 ) -> Result<(axum::http::StatusCode, Json<Value>), validators::ValidationRejection> {
     let body = validators::validate(body)?;
 
-    let exists = User::find_by_id(&state.pool, &id)
-        .await
-        .unwrap_or(None)
-        .is_some();
+    let exists = User::find_by_id(&id).await.unwrap_or(None).is_some();
 
     if !exists {
         return Ok(response::error("E_ROW_NOT_FOUND", "user not found", 404));
@@ -88,7 +76,7 @@ pub async fn update(
     }
 
     if !fields.is_empty() {
-        match User::update(&state.pool, &id, &fields).await {
+        match User::update(&id, &fields).await {
             Err(e) => return Ok(response::error("E_UPDATE", &e.to_string(), 500)),
             Ok(_) => {}
         }
@@ -98,14 +86,13 @@ pub async fn update(
 }
 
 pub async fn destroy(
-    State(state): State<AppState>,
     _admin: AdminOnly,
     Path(id): Path<String>,
 ) -> (axum::http::StatusCode, Json<Value>) {
-    match User::find_by_id(&state.pool, &id).await {
+    match User::find_by_id(&id).await {
         Err(e) => response::error("E_DATABASE", &e.to_string(), 500),
         Ok(None) => response::error("E_ROW_NOT_FOUND", "user not found", 404),
-        Ok(Some(_)) => match User::delete(&state.pool, &id).await {
+        Ok(Some(_)) => match User::delete(&id).await {
             Err(e) => response::error("E_DELETE", &e.to_string(), 500),
             Ok(true) => {
                 let status = response::no_content();
@@ -116,10 +103,7 @@ pub async fn destroy(
     }
 }
 
-pub async fn me(
-    State(state): State<AppState>,
-    user: AuthUser,
-) -> Result<(axum::http::StatusCode, Json<Value>), AppError> {
-    let user = User::find_or_fail(&state.pool, &user.user_id).await?;
+pub async fn me(user: AuthUser) -> Result<(axum::http::StatusCode, Json<Value>), AppError> {
+    let user = User::find_or_fail(&user.user_id).await?;
     Ok(response::ok(serde_json::json!({ "user": user })))
 }

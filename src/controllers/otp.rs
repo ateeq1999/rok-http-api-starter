@@ -27,7 +27,7 @@ pub async fn send(
     let body =
         validators::validate(body).map_err(|_| AppError::BadRequest("invalid request".into()))?;
 
-    let user = User::find_by_email(&state.pool, &body.email)
+    let user = User::find_by_email(&body.email)
         .await?
         .ok_or_else(|| AppError::NotFound("user not found".into()))?;
 
@@ -35,17 +35,14 @@ pub async fn send(
     let hash = auth::sha256_hex(&code);
     let expires_at = chrono::Utc::now() + chrono::Duration::hours(24);
 
-    EmailVerificationToken::invalidate_previous(&state.pool, &user.id).await?;
+    EmailVerificationToken::invalidate_previous(&user.id).await?;
 
-    EmailVerificationToken::create(
-        &state.pool,
-        &[
-            ("id", FieldValue::String(auth::generate_id())),
-            ("user_id", FieldValue::String(user.id.clone())),
-            ("token_hash", FieldValue::String(hash)),
-            ("expires_at", FieldValue::DateTime(expires_at)),
-        ],
-    )
+    EmailVerificationToken::create(&[
+        ("id", FieldValue::String(auth::generate_id())),
+        ("user_id", FieldValue::String(user.id.clone())),
+        ("token_hash", FieldValue::String(hash)),
+        ("expires_at", FieldValue::DateTime(expires_at)),
+    ])
     .await?;
 
     let verify_url = format!(
@@ -67,25 +64,24 @@ pub async fn send(
 }
 
 pub async fn verify(
-    State(state): State<AppState>,
     Json(body): Json<VerifyOtpRequest>,
 ) -> Result<(axum::http::StatusCode, Json<Value>), AppError> {
     let body =
         validators::validate(body).map_err(|_| AppError::BadRequest("invalid request".into()))?;
 
-    let user = User::find_by_email(&state.pool, &body.email)
+    let user = User::find_by_email(&body.email)
         .await?
         .ok_or_else(|| AppError::NotFound("user not found".into()))?;
 
     let hash = auth::sha256_hex(&body.code);
 
-    let token = EmailVerificationToken::find_valid(&state.pool, &user.id, &hash)
+    let token = EmailVerificationToken::find_valid(&user.id, &hash)
         .await?
         .ok_or_else(|| AppError::BadRequest("invalid or expired code".into()))?;
 
-    EmailVerificationToken::mark_used(&state.pool, &token.id).await?;
+    EmailVerificationToken::mark_used(&token.id).await?;
 
-    User::verify_email(&state.pool, &user.id).await?;
+    User::verify_email(&user.id).await?;
 
     Ok(response::ok(
         serde_json::json!({ "message": "email verified" }),

@@ -1,6 +1,7 @@
 mod auth;
 mod config;
 mod controllers;
+mod db;
 mod error;
 mod guards;
 mod mail;
@@ -38,6 +39,8 @@ async fn main() {
     migrations::run(&pool)
         .await
         .expect("failed to run migrations");
+
+    db::init(pool.clone());
 
     let mailer = mail::Mailer::new(
         &config.smtp_host,

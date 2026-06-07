@@ -3,6 +3,7 @@ use axum::Json;
 use serde_json::Value;
 
 use crate::auth::{self, AuthUser};
+use crate::db;
 use crate::models::User;
 use crate::response;
 use crate::services::crud::{CrudService, FieldValue};
@@ -16,7 +17,7 @@ pub async fn register(
 ) -> Result<(axum::http::StatusCode, Json<Value>), validators::ValidationRejection> {
     let body = validators::validate(body)?;
 
-    match User::find_by_email(&state.pool, &body.email).await {
+    match User::find_by_email(&body.email).await {
         Ok(Some(_)) => return Ok(response::error("E_DUPLICATE_EMAIL", "email already taken", 409)),
         Err(e) => return Ok(response::error("E_DATABASE", &e.to_string(), 500)),
         Ok(None) => {}
@@ -27,16 +28,13 @@ pub async fn register(
         Ok(h) => h,
     };
 
-    let user = match User::create(
-        &state.pool,
-        &[
-            ("id", FieldValue::String(auth::generate_id())),
-            ("email", FieldValue::String(body.email.to_lowercase())),
-            ("password_hash", FieldValue::String(hash)),
-            ("name", FieldValue::String(body.name.clone())),
-            ("roles", FieldValue::String("user".to_string())),
-        ],
-    )
+    let user = match User::create(&[
+        ("id", FieldValue::String(auth::generate_id())),
+        ("email", FieldValue::String(body.email.to_lowercase())),
+        ("password_hash", FieldValue::String(hash)),
+        ("name", FieldValue::String(body.name.clone())),
+        ("roles", FieldValue::String("user".to_string())),
+    ])
     .await
     {
         Err(e) => return Ok(response::error("E_DATABASE", &e.to_string(), 500)),
@@ -64,7 +62,7 @@ pub async fn login(
 ) -> Result<(axum::http::StatusCode, Json<Value>), validators::ValidationRejection> {
     let body = validators::validate(body)?;
 
-    let user = match User::find_by_email(&state.pool, &body.email).await {
+    let user = match User::find_by_email(&body.email).await {
         Ok(Some(u)) => u,
         Ok(None) => return Ok(response::error("E_LOGIN", "invalid email or password", 401)),
         Err(e) => return Ok(response::error("E_DATABASE", &e.to_string(), 500)),
@@ -101,15 +99,14 @@ pub async fn forgot_password(
 ) -> Result<(axum::http::StatusCode, Json<Value>), validators::ValidationRejection> {
     let body = validators::validate(body)?;
 
-    let user = User::find_by_email(&state.pool, &body.email)
-        .await
-        .unwrap_or(None);
+    let user = User::find_by_email(&body.email).await.unwrap_or(None);
 
     if let Some(user) = user {
         let plain_token = auth::generate_id();
         let token_hash = auth::sha256_hex(&plain_token);
         let expires_at = chrono::Utc::now() + chrono::Duration::hours(1);
 
+        let pool = db::pool();
         let result = sqlx::query(
             "INSERT INTO password_resets (id, email, token_hash, expires_at) VALUES ($1, $2, $3, $4)",
         )
@@ -117,7 +114,7 @@ pub async fn forgot_password(
         .bind(&user.email)
         .bind(&token_hash)
         .bind(expires_at)
-        .execute(&state.pool)
+        .execute(pool)
         .await;
 
         if let Ok(_) = result {
@@ -139,20 +136,20 @@ pub async fn forgot_password(
 }
 
 pub async fn reset_password(
-    State(state): State<AppState>,
     Json(body): Json<ResetPasswordRequest>,
 ) -> Result<(axum::http::StatusCode, Json<Value>), validators::ValidationRejection> {
     let body = validators::validate(body)?;
 
     let token_hash = auth::sha256_hex(&body.token);
 
+    let pool = db::pool();
     let email: Option<String> = sqlx::query_scalar(
         "SELECT email FROM password_resets
          WHERE token_hash = $1 AND used_at IS NULL AND expires_at > NOW()
          LIMIT 1",
     )
     .bind(&token_hash)
-    .fetch_optional(&state.pool)
+    .fetch_optional(pool)
     .await
     .unwrap_or(None);
 
@@ -166,26 +163,20 @@ pub async fn reset_password(
         Ok(h) => h,
     };
 
-    let user = match User::find_by_email(&state.pool, &email).await {
+    let user = match User::find_by_email(&email).await {
         Ok(Some(u)) => u,
         Ok(None) => return Ok(response::error("E_ROW_NOT_FOUND", "user not found", 404)),
         Err(e) => return Ok(response::error("E_DATABASE", &e.to_string(), 500)),
     };
 
-    match User::update(
-        &state.pool,
-        &user.id,
-        &[("password_hash", FieldValue::String(hash))],
-    )
-    .await
-    {
+    match User::update(&user.id, &[("password_hash", FieldValue::String(hash))]).await {
         Err(e) => Ok(response::error("E_UPDATE", &e.to_string(), 500)),
         Ok(_) => {
             let _ = sqlx::query(
                 "UPDATE password_resets SET used_at = NOW() WHERE token_hash = $1",
             )
             .bind(&token_hash)
-            .execute(&state.pool)
+            .execute(pool)
             .await;
 
             Ok(response::ok(serde_json::json!({ "message": "password reset" })))

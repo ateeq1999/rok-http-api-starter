@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
+use crate::db;
 use crate::services::crud::CrudService;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -19,10 +20,10 @@ impl CrudService for EmailVerificationToken {
 
 impl EmailVerificationToken {
     pub async fn find_valid(
-        pool: &sqlx::PgPool,
         user_id: &str,
         token_hash: &str,
     ) -> Result<Option<Self>, sqlx::Error> {
+        let pool = db::pool();
         sqlx::query_as::<_, Self>(
             "SELECT * FROM email_verification_tokens
              WHERE user_id = $1
@@ -37,10 +38,8 @@ impl EmailVerificationToken {
         .await
     }
 
-    pub async fn mark_used(
-        pool: &sqlx::PgPool,
-        id: &str,
-    ) -> Result<Self, sqlx::Error> {
+    pub async fn mark_used(id: &str) -> Result<Self, sqlx::Error> {
+        let pool = db::pool();
         sqlx::query_as::<_, Self>(
             "UPDATE email_verification_tokens SET used_at = NOW() WHERE id = $1 RETURNING *",
         )
@@ -50,9 +49,9 @@ impl EmailVerificationToken {
     }
 
     pub async fn invalidate_previous(
-        pool: &sqlx::PgPool,
         user_id: &str,
     ) -> Result<sqlx::postgres::PgQueryResult, sqlx::Error> {
+        let pool = db::pool();
         sqlx::query(
             "UPDATE email_verification_tokens SET used_at = NOW()
              WHERE user_id = $1 AND used_at IS NULL",
