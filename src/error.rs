@@ -1,6 +1,6 @@
 use axum::response::{IntoResponse, Response};
 
-use crate::response::{ApiResponse, ErrorCode};
+use api_core::response::{ApiResponse, ErrorCode};
 
 #[derive(Debug)]
 pub enum AppError {

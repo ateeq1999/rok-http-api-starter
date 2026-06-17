@@ -7,7 +7,7 @@ use api_core::crud::CrudService;
 use api_core::response::{ApiResponse, ErrorCode};
 
 use crate::auth::AuthUser;
-use crate::db;
+use api_core::db;
 use crate::models::User;
 use crate::state::AppState;
 use crate::validators;

@@ -7,7 +7,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 
 use rok_api_start::cli::{Cli, Command, DbCommand};
 use rok_api_start::config;
-use rok_api_start::db;
+use api_core::db;
 use rok_api_start::mail;
 use rok_api_start::routes;
 use rok_api_start::state::AppState;

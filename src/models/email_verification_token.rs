@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use sqlx::PgPool;
 
-use crate::db;
+use api_core::db;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct EmailVerificationToken {
