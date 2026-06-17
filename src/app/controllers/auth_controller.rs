@@ -8,10 +8,10 @@ use api_core::response::{ApiResponse, ErrorCode};
 
 use crate::auth::AuthUser;
 use api_core::db;
-use crate::models::User;
+use crate::app::models::User;
 use crate::state::AppState;
-use crate::validators;
-use crate::validators::auth::*;
+use crate::app::validators;
+use crate::app::validators::auth::*;
 
 pub async fn refresh(
     State(state): State<AppState>,

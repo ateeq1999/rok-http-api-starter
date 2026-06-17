@@ -6,10 +6,10 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 use rok_api_start::cli::{Cli, Command, DbCommand};
-use rok_api_start::config;
+use rok_api_start::config::AppConfig;
 use api_core::db;
-use rok_api_start::mail;
-use rok_api_start::routes;
+use rok_api_start::app::mails::Mailer;
+use rok_api_start::start::routes;
 use rok_api_start::state::AppState;
 
 #[tokio::main]
@@ -30,14 +30,14 @@ async fn main() -> anyhow::Result<()> {
             start_server().await?;
         }
         Some(Command::Server { run_migrations: true }) => {
-            let config = config::AppConfig::from_env();
+            let config = AppConfig::from_env();
             let pool = PgPool::connect(&config.database_url).await?;
             api_core::migrations::run(&pool).await?;
             db::init(pool.clone());
             serve(config, pool).await?;
         }
         Some(Command::Db { command }) => {
-            let config = config::AppConfig::from_env();
+            let config = AppConfig::from_env();
             let pool = PgPool::connect(&config.database_url).await?;
             match command {
                 DbCommand::Migrate => {
@@ -64,14 +64,14 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn start_server() -> anyhow::Result<()> {
-    let config = config::AppConfig::from_env();
+    let config = AppConfig::from_env();
     let pool = PgPool::connect(&config.database_url).await?;
     db::init(pool.clone());
     serve(config, pool).await
 }
 
-async fn serve(config: config::AppConfig, pool: PgPool) -> anyhow::Result<()> {
-    let mailer = mail::Mailer::new(
+async fn serve(config: AppConfig, pool: PgPool) -> anyhow::Result<()> {
+    let mailer = Mailer::new(
         &config.smtp_host,
         config.smtp_port,
         &config.smtp_from,

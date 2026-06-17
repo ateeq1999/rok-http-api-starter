@@ -7,11 +7,11 @@ use api_core::crud::CrudService;
 use api_core::response::ApiResponse;
 
 use crate::error::AppError;
-use crate::models::EmailVerificationToken;
-use crate::models::User;
+use crate::app::models::EmailVerificationToken;
+use crate::app::models::User;
 use crate::state::AppState;
-use crate::validators;
-use crate::validators::otp::*;
+use crate::app::validators;
+use crate::app::validators::otp::*;
 
 fn generate_otp(length: u32) -> String {
     use rand::Rng;

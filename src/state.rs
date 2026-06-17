@@ -1,7 +1,7 @@
 use axum::extract::FromRef;
 
 use crate::config::AppConfig;
-use crate::mail::Mailer;
+use crate::app::mails::Mailer;
 
 #[derive(Clone)]
 pub struct AppState {

@@ -1,11 +1,8 @@
+pub mod app;
 pub mod auth;
 pub mod cli;
 pub mod config;
-pub mod controllers;
 pub mod error;
-pub mod mail;
-pub mod models;
-pub mod routes;
 pub mod state;
 pub mod storage;
-pub mod validators;
+pub mod start;

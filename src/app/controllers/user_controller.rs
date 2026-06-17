@@ -10,11 +10,11 @@ use api_core::response::{ApiResponse, ErrorCode};
 use crate::auth::AdminOnly;
 use crate::auth::AuthUser;
 use crate::error::AppError;
-use crate::models::User;
+use crate::app::models::User;
 use crate::state::AppState;
 use crate::storage;
-use crate::validators;
-use crate::validators::user::*;
+use crate::app::validators;
+use crate::app::validators::user::*;
 
 pub async fn index(_admin: AdminOnly) -> Result<ApiResponse, AppError> {
     let users = User::all().await?;

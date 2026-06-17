@@ -34,7 +34,7 @@ impl Mailer {
         verify_url: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let html = Self::render(
-            include_str!("../templates/email_otp.html"),
+            include_str!("../../../templates/email_otp.html"),
             &[("name", name), ("code", code), ("verify_url", verify_url)],
         );
         self.send_raw(to, "Verify your email address", &html).await
@@ -48,7 +48,7 @@ impl Mailer {
         reset_url: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let html = Self::render(
-            include_str!("../templates/email_reset.html"),
+            include_str!("../../../templates/email_reset.html"),
             &[("name", name), ("token", token), ("reset_url", reset_url)],
         );
         self.send_raw(to, "Reset your password", &html).await
