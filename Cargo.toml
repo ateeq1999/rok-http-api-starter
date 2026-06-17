@@ -29,4 +29,5 @@ validator = { version = "0.19", features = ["derive"] }
 tower = { version = "0.5", features = ["util"] }
 tower_governor = "0.8"
 tower-cookies = "0.11"
+totp-rs = { version = "5.7", features = ["otpauth", "gen_secret"] }
 thiserror = "2"

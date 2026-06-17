@@ -3,19 +3,17 @@ use axum::Router;
 use tower_governor::governor::GovernorConfigBuilder;
 use tower_governor::GovernorLayer;
 
-use crate::app::controllers::auth_controller;
+use crate::app::controllers::{auth_controller, two_factor_controller};
 use crate::state::AppState;
 
 /// Public auth routes (no JWT required).
 pub fn public_routes() -> Router<AppState> {
-    // Strict rate limit: burst of 5, replenish 1/sec
     let strict_config = GovernorConfigBuilder::default()
         .per_second(1)
         .burst_size(5)
         .finish()
         .unwrap();
 
-    // Generous rate limit: burst of 10, replenish 2/sec
     let generous_config = GovernorConfigBuilder::default()
         .per_second(2)
         .burst_size(10)
@@ -30,14 +28,8 @@ pub fn public_routes() -> Router<AppState> {
         .layer(GovernorLayer::new(strict_config));
 
     let generous_routes = Router::new()
-        .route(
-            "/forgot-password",
-            post(auth_controller::forgot_password),
-        )
-        .route(
-            "/magic-link",
-            post(auth_controller::magic_link_request),
-        )
+        .route("/forgot-password", post(auth_controller::forgot_password))
+        .route("/magic-link", post(auth_controller::magic_link_request))
         .layer(GovernorLayer::new(generous_config));
 
     let unthrottled_routes = Router::new()
@@ -52,4 +44,8 @@ pub fn protected_routes() -> Router<AppState> {
     Router::new()
         .route("/logout", post(auth_controller::logout))
         .route("/refresh", post(auth_controller::refresh))
+        // 2FA
+        .route("/2fa/enable", post(two_factor_controller::enable))
+        .route("/2fa/verify", post(two_factor_controller::verify))
+        .route("/2fa/disable", post(two_factor_controller::disable))
 }

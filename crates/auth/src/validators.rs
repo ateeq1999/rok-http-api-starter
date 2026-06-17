@@ -129,6 +129,22 @@ pub struct UsernameLoginRequest {
     pub password: String,
 }
 
+// ── 2FA DTOs ────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct TwoFactorVerifyRequest {
+    #[validate(length(min = 6, max = 6))]
+    pub code: String,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct TwoFactorDisableRequest {
+    #[validate(length(min = 1))]
+    pub password: String,
+    #[validate(length(min = 6, max = 6))]
+    pub code: String,
+}
+
 // ── ValidatedJson extractor ──────────────────────────────────────
 
 pub struct ValidatedJson<T>(pub T);

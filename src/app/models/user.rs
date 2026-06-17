@@ -16,6 +16,10 @@ pub struct User {
     pub username: Option<String>,
     pub avatar_url: Option<String>,
     pub email_verified_at: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(skip_serializing)]
+    pub totp_secret: Option<String>,
+    #[serde(skip_serializing)]
+    pub totp_enabled: bool,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }

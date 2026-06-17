@@ -111,6 +111,22 @@ Migrations use `.up.sql` / `.down.sql` pairs in `database/migrations/`.
 | `POST` | `/auth/otp/login/send` | — | 5 burst, 1/sec | Send login OTP code via email (10 min expiry) |
 | `POST` | `/auth/otp/login/verify` | — | 5 burst, 1/sec | Verify login OTP code, returns tokens |
 
+### Two-Factor Authentication (`/api/v1/auth`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/auth/2fa/enable` | Bearer | Initiate 2FA — returns secret, otpauth URL, and backup codes |
+| `POST` | `/auth/2fa/verify` | Bearer | Verify TOTP code to activate 2FA |
+| `POST` | `/auth/2fa/disable` | Bearer | Disable 2FA (requires password + TOTP code) |
+
+### Sessions (`/api/v1`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/me/sessions` | Bearer | List active sessions |
+| `DELETE` | `/me/sessions/{id}` | Bearer | Revoke a specific session |
+| `DELETE` | `/me/sessions` | Bearer | Revoke all sessions |
+
 ### Profile (`/api/v1`)
 
 | Method | Path | Auth | Description |
