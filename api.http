@@ -56,7 +56,7 @@ POST {{baseUrl}}/auth/reset-password
 Content-Type: application/json
 
 {
-  "token": "7df305cfcd76d8d981913d6ae52ff2f35477d8ea54d0bd752cf30a352bdfa325",
+  "token": "00118d65-165d-4ce8-a759-94e837e093a5",
   "password": "Newpassword1!"
 }
 
@@ -73,11 +73,12 @@ Content-Type: application/json
 
 ### Verify OTP
 POST {{baseUrl}}/otp/verify
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-  "email": "user@example.com",
-  "code": "850645"
+  "email": "admin@example.com",
+  "code": "123678"
 }
 
 ### ─── Profile ─────────────────────────────────────────────

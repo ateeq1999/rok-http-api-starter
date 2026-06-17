@@ -156,16 +156,23 @@ pub async fn forgot_password(
         .execute(db::pool())
         .await;
 
-        if let Ok(_) = result {
-            let reset_url = format!(
-                "{}/reset-password?token={}",
-                config.app_url, plain_token,
-            );
-            if let Err(e) = mailer
-                .send_password_reset(&user.email, &user.name, &plain_token, &reset_url)
-                .await
-            {
-                tracing::error!("failed to send password reset email: {e}");
+        match result {
+            Ok(_) => {
+                let reset_url = format!(
+                    "{}/reset-password?token={}",
+                    config.app_url, plain_token,
+                );
+                if let Err(e) = mailer
+                    .send_password_reset(&user.email, &user.name, &plain_token, &reset_url)
+                    .await
+                {
+                    tracing::error!("failed to send password reset email to {}: {e}", user.email);
+                } else {
+                    tracing::info!("password reset email sent to {}", user.email);
+                }
+            }
+            Err(e) => {
+                tracing::error!("failed to insert password reset token: {e}");
             }
         }
     }
