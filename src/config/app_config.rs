@@ -22,6 +22,12 @@ pub struct AppConfig {
     pub google_client_secret: String,
     #[allow(dead_code)]
     pub google_redirect_uri: String,
+    #[allow(dead_code)]
+    pub github_client_id: String,
+    #[allow(dead_code)]
+    pub github_client_secret: String,
+    #[allow(dead_code)]
+    pub github_redirect_uri: String,
     pub app_url: String,
     pub otp_length: u32,
     pub storage_dir: String,
@@ -62,6 +68,10 @@ impl AppConfig {
             google_client_secret: std::env::var("GOOGLE_CLIENT_SECRET").unwrap_or_default(),
             google_redirect_uri: std::env::var("GOOGLE_REDIRECT_URI")
                 .unwrap_or_else(|_| "http://localhost:8080/auth/google/callback".into()),
+            github_client_id: std::env::var("GITHUB_CLIENT_ID").unwrap_or_default(),
+            github_client_secret: std::env::var("GITHUB_CLIENT_SECRET").unwrap_or_default(),
+            github_redirect_uri: std::env::var("GITHUB_REDIRECT_URI")
+                .unwrap_or_else(|_| "http://localhost:8080/auth/github/callback".into()),
             app_url: std::env::var("APP_URL").unwrap_or_else(|_| "http://localhost:8080".into()),
             otp_length: std::env::var("OTP_LENGTH")
                 .ok()

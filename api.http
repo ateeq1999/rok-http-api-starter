@@ -101,6 +101,45 @@ Content-Type: application/json
   "code": "123456"
 }
 
+### ─── Auth: Two-Factor (TOTP) ────────────────────────────
+
+### Enable 2FA (returns secret + otpauth URL + backup codes)
+POST {{baseUrl}}/auth/2fa/enable
+Authorization: Bearer {{token}}
+
+### Verify & Activate 2FA
+POST {{baseUrl}}/auth/2fa/verify
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "code": "123456"
+}
+
+### Disable 2FA (requires password + TOTP code)
+POST {{baseUrl}}/auth/2fa/disable
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "password": "Password1!",
+  "code": "123456"
+}
+
+### ─── Auth: Social Login ─────────────────────────────────
+
+### Google Login (redirects to Google)
+GET {{baseUrl}}/auth/oauth/google/redirect
+
+### Google Callback (redirect from Google)
+GET {{baseUrl}}/auth/oauth/google/callback?code=AUTHORIZATION_CODE&state=STATE
+
+### GitHub Login (redirects to GitHub)
+GET {{baseUrl}}/auth/oauth/github/redirect
+
+### GitHub Callback (redirect from GitHub)
+GET {{baseUrl}}/auth/oauth/github/callback?code=AUTHORIZATION_CODE&state=STATE
+
 ### ─── OTP / Email Verification ────────────────────────────
 
 ### Send Registration OTP
@@ -138,7 +177,21 @@ Content-Disposition: form-data; name="file"; filename="photo.jpg"
 Content-Type: image/jpeg
 
 < ./test-avatar.jpg
-----avatar--
+----
+
+### ─── Sessions ───────────────────────────────────────────
+
+### List Active Sessions
+GET {{baseUrl}}/me/sessions
+Authorization: Bearer {{token}}
+
+### Revoke a Session
+DELETE {{baseUrl}}/me/sessions/{{sessionId}}
+Authorization: Bearer {{token}}
+
+### Revoke All Sessions
+DELETE {{baseUrl}}/me/sessions
+Authorization: Bearer {{token}}
 
 ### ─── User Management (Admin) ─────────────────────────────
 
@@ -175,11 +228,3 @@ Content-Type: application/json
 ### Delete User
 DELETE {{baseUrl}}/users/{{userId}}
 Authorization: Bearer {{token}}
-
-### ─── Social Auth (Google) ────────────────────────────────
-
-### Google Login (redirects to Google)
-GET {{baseUrl}}/auth/google/authorize
-
-### Google Callback (redirect from Google)
-GET {{baseUrl}}/auth/google/callback?code=<authorization-code>&state=<state>

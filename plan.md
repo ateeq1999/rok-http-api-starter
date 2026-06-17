@@ -200,13 +200,187 @@ Everything after this phase assumes a hardened session layer.
 
 ---
 
-## Phase 4 — Social Login & Account Linking
+## Phase 4a — Plugin-like DX (reduce boilerplate) ✅ DONE
 
-- Wire `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` into actual flow using `oauth2` crate: `GET /auth/oauth/{provider}/redirect`, `GET /auth/oauth/{provider}/callback`. GitHub as second provider.
-- `accounts` table (user_id, provider, provider_account_id, access/refresh tokens) — one user can have email/password + Google + GitHub.
-- `POST /me/accounts/link/{provider}` and `DELETE /me/accounts/{provider}`.
+**Problem:** ~550 lines of controller+service code in `src/` with 18 `ApiResponse::ok(json!({}))`, 12 `.map_err` closures, and manual route wiring. User wants "configuration of plugins" feel.
 
-**New migrations:** `accounts`.
+### Response helpers (api-core)
+
+Add to `ApiResponse`:
+```rust
+impl ApiResponse {
+    pub fn message(msg: &str) -> Self { Self::ok(json!({ "message": msg })) }
+    pub fn data(key: &str, val: impl Serialize) -> Self { Self::ok(json!({ key: val })) }
+}
+```
+→ Replaces 12 of 18 `ApiResponse::ok(json!({...}))` calls.
+
+### Error helpers (root error.rs)
+
+Add method on `AppError`:
+```rust
+impl AppError {
+    pub fn internal(msg: impl ToString) -> Self { Self::Internal(msg.to_string()) }
+}
+```
+Add `OrBadRequest` trait (like existing `OrInternal`):
+```rust
+pub trait OrBadRequest<T> {
+    fn or_bad_request(self) -> Result<T, AppError>;
+}
+```
+→ Replaces 12 `.map_err(|e| AppError::Internal(e.to_string()))` closures.
+
+### AuthPlugin builder (crates/auth)
+
+Create `AuthPlugin` that auto-configures all auth routes:
+```rust
+let auth = AuthPlugin::builder()
+    .google(GoogleOAuth::from_env())   // enables /auth/oauth/google/*
+    .github(GithubOAuth::from_env())   // enables /auth/oauth/github/*
+    .magic_link()                      // enables /auth/magic-link/*
+    .login_otp()                       // enables /auth/otp/*
+    .totp_2fa()                        // enables /auth/2fa/*
+    .sessions()                        // enables /me/sessions
+    .build(pool, mailer);
+
+// In main.rs:
+let app = Router::new()
+    .merge(auth.public_routes())   // register, login, oauth redirect/callback, magic link, OTP
+    .merge(auth.protected_routes().layer(jwt_layer))  // logout, refresh, 2fa, sessions
+    .merge(api::routes().layer(jwt_layer));  // user CRUD, profile, OTP verify
+```
+
+The auth crate owns handlers + services internally. Root `src/` loses ~400 lines.
+
+### Dependency inversion
+
+Auth crate defines `AuthContext` trait:
+```rust
+pub trait AuthContext: Clone + Send + Sync + 'static {
+    fn pool(&self) -> &PgPool;
+    fn config(&self) -> &AuthConfig;
+    fn mailer(&self) -> &dyn MailSender;
+}
+```
+Root implements `AuthContext for AppState`. No circular deps.
+
+### Files
+
+- `crates/auth/src/plugin.rs` — AuthPlugin builder + handlers + routes
+- `crates/auth/src/context.rs` — AuthContext trait
+- `crates/api-core/src/response.rs` — ApiResponse::message, ApiResponse::data
+- `src/error.rs` — AppError::internal, OrBadRequest
+- `src/start/routes/mod.rs` — use AuthPlugin instead of manual nesting
+- `src/start/routes/auth.rs` — DELETE (absorbed into plugin)
+- `src/start/routes/api.rs` — keep user/OTP routes, sessions moves to plugin
+- `src/app/controllers/auth_controller.rs` — DELETE (absorbed into plugin)
+- `src/app/controllers/two_factor_controller.rs` — DELETE (absorbed into plugin)
+- `src/app/controllers/session_controller.rs` — DELETE (absorbed into plugin)
+- `src/app/services/auth_service.rs` — DELETE (absorbed into plugin)
+- `src/app/services/two_factor_service.rs` — DELETE (absorbed into plugin)
+- `src/app/services/session_service.rs` — DELETE (absorbed into plugin)
+- `src/app/services/magic_link_service.rs` — DELETE (absorbed into plugin)
+- `src/app/services/login_otp_service.rs` — DELETE (absorbed into plugin)
+- Root `src/` keeps only: user_controller, user_service, otp_controller, profile stuff
+
+**Net result:** ~400 lines removed from `src/`, auth becomes a self-contained plugin.
+
+---
+
+## Phase 4b — Social Login & Account Linking ✅ DONE
+
+Wire `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` and `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET` into actual OAuth flows using the `oauth2` crate. One user can have email/password + Google + GitHub.
+
+### Database
+
+**New migration `000017_accounts.sql`:**
+```sql
+CREATE TABLE accounts (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider TEXT NOT NULL,
+    provider_account_id TEXT NOT NULL,
+    access_token TEXT,
+    refresh_token TEXT,
+    token_expires_at TIMESTAMPTZ,
+    provider_user_data JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX idx_accounts_provider_user ON accounts(provider, provider_account_id);
+CREATE INDEX idx_accounts_user_id ON accounts(user_id);
+```
+
+One user can have multiple accounts (google + github + email/password). `provider_account_id` is the provider's unique ID (e.g. GitHub's numeric user ID, Google's sub claim).
+
+### Config
+
+Add to `AppConfig` + `.env`:
+- `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_REDIRECT_URI`
+
+### Dependencies
+
+Add `oauth2 = "5"` to root `Cargo.toml`.
+
+### Service: `oauth_service.rs`
+
+```
+start_authorization(provider, redirect_base) -> (url, state, pkce_verifier)
+    - Builds OAuth2 authorize URL with PKCE + CSRF state
+    - Stores state + pkce_verifier in DB (oauth_states table) or returns them to be cookie-set
+    - Returns (auth_url, state, pkce_verifier)
+
+handle_callback(provider, code, state, pkce_verifier) -> TokenPair
+    - Exchanges code + pkce_verifier for tokens
+    - Fetches user info from provider's userinfo endpoint
+    - Finds or creates user by email (if email exists, link account; if not, create user)
+    - Creates/updates account record
+    - Returns JWT tokens (same as login)
+```
+
+### Controller: `oauth_controller.rs`
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `GET /auth/oauth/{provider}/redirect` | Public | Generates auth URL, redirects to provider |
+| `GET /auth/oauth/{provider}/callback` | Public | Handles provider callback, returns tokens |
+
+### Account linking (authenticated)
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `POST /me/accounts/link/{provider}` | Protected | Initiate linking for logged-in user |
+| `DELETE /me/accounts/{provider}` | Protected | Unlink provider from account |
+| `GET /me/accounts` | Protected | List linked providers |
+
+### CSRF + PKCE state storage
+
+Use cookies for state + pkce_verifier (simpler than DB table for single-server):
+- `oauth_state` cookie (HttpOnly, SameSite=Lax, 5 min TTL)
+- `oauth_pkce` cookie (HttpOnly, SameSite=Lax, 5 min TTL)
+
+### Flow
+
+1. `GET /auth/oauth/google/redirect` → generates state + PKCE, sets cookies, redirects to Google
+2. Google redirects to `GET /auth/oauth/google/callback?code=...&state=...`
+3. Controller validates state from cookie, exchanges code for tokens
+4. Fetches user info (email, name, avatar)
+5. Finds user by email or creates new user
+6. Upserts account record
+7. Returns JWT tokens (cookie or bearer based on AUTH_STRATEGY)
+
+### Files
+
+- `database/migrations/000017_accounts.up.sql` + `.down.sql`
+- `src/app/services/oauth_service.rs`
+- `src/app/controllers/oauth_controller.rs`
+- `src/start/routes/auth.rs` (add OAuth routes)
+- `src/config/app_config.rs` (add github env vars)
+- `.env` (add GITHUB vars)
+- `Cargo.toml` (add oauth2)
+- `README.md` + `api.http` (update docs)
 
 ---
 
@@ -289,31 +463,51 @@ Treat as optional scope — matching better-auth feature-for-feature isn't worth
 | Phase | Crate(s) |
 |---|---|
 | 1 | `tower-governor`, `tower-cookies`, `tower-http` (cors/headers) |
-| 3 | `totp-rs`, `webauthn-rs` |
-| 4 | `oauth2` |
+| 3 | `totp-rs` |
+| 4a | none — refactoring into auth plugin |
+| 4b | `oauth2` |
 | 5 | none new — plain Rust traits + Postgres tables |
 | 9 | `apalis`, `utoipa`, `utoipa-swagger-ui` |
 | 10 | `tracing-opentelemetry`, `opentelemetry-otlp` |
 | 11 | `samael` (SAML) |
 
-## Suggested directory additions
+## Directory evolution (after Phase 4a)
 
+**Before (root `src/`):**
 ```
-src/
-├── events/                 # Phase 9: EventBus + event structs + listeners
-├── jobs/                   # Phase 9: apalis job definitions
-├── mail/                   # Phase 9: Mailable trait + templates
-├── policies/               # Phase 5: Policy trait impls per resource
-├── controllers/
-│   ├── oauth.rs             # Phase 4
-│   ├── two_factor.rs        # Phase 3
-│   ├── passkey.rs           # Phase 3
-│   ├── sessions.rs          # Phase 1/3
-│   ├── api_keys.rs          # Phase 8
-│   ├── organizations.rs     # Phase 6
-│   └── admin.rs             # Phase 7
+src/app/controllers/auth_controller.rs      (146 lines)
+src/app/controllers/two_factor_controller.rs (32 lines)
+src/app/controllers/session_controller.rs    (34 lines)
+src/app/controllers/otp_controller.rs        (28 lines)
+src/app/services/auth_service.rs            (246 lines)
+src/app/services/two_factor_service.rs      (192 lines)
+src/app/services/session_service.rs          (60 lines)
+src/app/services/magic_link_service.rs       (90 lines)
+src/app/services/login_otp_service.rs        (105 lines)
+src/start/routes/auth.rs                     (51 lines)
+                                          ─────────────
+                                          ~984 lines
 ```
+
+**After (root `src/`):**
+```
+src/app/controllers/user_controller.rs      (92 lines)
+src/app/controllers/otp_controller.rs       (28 lines)
+src/app/services/user_service.rs            (100 lines)
+src/start/routes/mod.rs                     (15 lines — uses AuthPlugin)
+src/start/routes/api.rs                     (26 lines — user CRUD + OTP)
+                                          ─────────────
+                                          ~261 lines
+
+crates/auth/src/plugin.rs                  (~600 lines — all auth handlers + services + routes)
+crates/auth/src/context.rs                 (10 lines — AuthContext trait)
+```
+
+**Net: ~723 lines removed from root `src/`, auth becomes self-contained plugin.**
 
 ## Recommended starting point
 
-Phases 1 → 2 → 3 → 4 track better-auth's own core-then-plugins order and are independently shippable. Phase 5 (RBAC) is worth pulling forward if any admin/permission work is on the near-term roadmap. Phase 6 (organizations) and Phase 11 (enterprise) are the two phases to skip entirely unless a specific requirement shows up.
+1. **Phase 4a first** (plugin DX) — reduces boilerplate, makes Phase 4b cleaner
+2. **Phase 4b** (social login) — OAuth flows inside the plugin
+3. **Phase 5** (RBAC) — if admin features needed soon
+4. Skip Phase 6 (organizations) unless a concrete multi-tenant requirement appears

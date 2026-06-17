@@ -1,9 +1,7 @@
-use auth::primitives;
-use api_core::db;
-use crate::app::models::User;
-use crate::config::AppConfig;
-use crate::app::mails::Mailer;
-use crate::error::{AppError, OrInternal};
+use crate::context::AuthContext;
+use crate::error::AuthError;
+use crate::primitives;
+use crate::primitives::TokenPair;
 
 fn generate_otp(length: u32) -> String {
     use rand::Rng;
@@ -13,24 +11,22 @@ fn generate_otp(length: u32) -> String {
         .collect()
 }
 
-pub async fn send_login_otp(
-    config: &AppConfig,
-    mailer: &Mailer,
+pub async fn send_login_otp<C: AuthContext>(
+    ctx: &C,
     email: &str,
-) -> Result<(), AppError> {
-    let user = User::find_by_email(email)
-        .await
-        .or_internal()?
-        .ok_or_else(|| AppError::NotFound("user not found".into()))?;
+) -> Result<(), AuthError> {
+    let user = ctx.user_finder()
+        .find_by_email(email)
+        .await?
+        .ok_or_else(|| AuthError::not_found("user not found"))?;
 
-    let code = generate_otp(config.otp_length);
+    let code = generate_otp(ctx.config().otp_length);
     let code_hash = primitives::sha256_hex(&code);
     let expires_at = chrono::Utc::now() + chrono::Duration::minutes(10);
 
-    // Invalidate any previous unused OTPs for this email
     let _ = sqlx::query("UPDATE login_otp SET used_at = NOW() WHERE email = $1 AND used_at IS NULL")
         .bind(&user.email)
-        .execute(db::pool())
+        .execute(ctx.pool())
         .await;
 
     let _ = sqlx::query(
@@ -40,15 +36,15 @@ pub async fn send_login_otp(
     .bind(&user.email)
     .bind(&code_hash)
     .bind(expires_at)
-    .execute(db::pool())
+    .execute(ctx.pool())
     .await;
 
     let verify_url = format!(
         "{}/api/v1/auth/otp/login/verify?code={}&email={}",
-        config.app_url, code, email,
+        ctx.config().app_url, code, email,
     );
 
-    if let Err(e) = mailer
+    if let Err(e) = ctx.mailer()
         .send_login_otp(&user.email, &user.name, &code, &verify_url)
         .await
     {
@@ -60,11 +56,11 @@ pub async fn send_login_otp(
     Ok(())
 }
 
-pub async fn verify_login_otp(
-    config: &AppConfig,
+pub async fn verify_login_otp<C: AuthContext>(
+    ctx: &C,
     email: &str,
     code: &str,
-) -> Result<auth::primitives::TokenPair, AppError> {
+) -> Result<TokenPair, AuthError> {
     let code_hash = primitives::sha256_hex(code);
 
     let record: (String, String) = sqlx::query_as(
@@ -74,32 +70,30 @@ pub async fn verify_login_otp(
     )
     .bind(email)
     .bind(&code_hash)
-    .fetch_optional(db::pool())
-    .await
-    .or_internal()?
-    .ok_or_else(|| AppError::BadRequest("invalid or expired code".into()))?;
+    .fetch_optional(ctx.pool())
+    .await?
+    .ok_or_else(|| AuthError::bad_request("invalid or expired code"))?;
 
     let (otp_id, otp_email) = record;
 
-    // Mark OTP as used
     let _ = sqlx::query("UPDATE login_otp SET used_at = NOW() WHERE id = $1")
         .bind(&otp_id)
-        .execute(db::pool())
+        .execute(ctx.pool())
         .await;
 
-    let user = User::find_by_email(&otp_email)
-        .await
-        .or_internal()?
-        .ok_or_else(|| AppError::NotFound("user not found".into()))?;
+    let user = ctx.user_finder()
+        .find_by_email(&otp_email)
+        .await?
+        .ok_or_else(|| AuthError::not_found("user not found"))?;
 
     let family_id = primitives::generate_id();
     primitives::generate_token_pair_with_family(
         &user.id,
         &user.roles,
-        &config.auth_secret,
-        config.token_ttl,
-        config.refresh_ttl,
+        &ctx.config().auth_secret,
+        ctx.config().token_ttl,
+        ctx.config().refresh_ttl,
         Some(family_id),
     )
-    .map_err(|e| AppError::Internal(e.to_string()))
+    .map_err(AuthError::internal)
 }

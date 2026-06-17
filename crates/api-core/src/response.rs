@@ -1,6 +1,7 @@
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use serde::Serialize;
 use serde_json::Value;
 
 pub struct ApiResponse {
@@ -35,6 +36,14 @@ impl ApiResponse {
             }
         });
         Self { status: code.status(), body }
+    }
+
+    pub fn message(msg: &str) -> Self {
+        Self::ok(serde_json::json!({ "message": msg }))
+    }
+
+    pub fn data(key: &str, val: impl Serialize) -> Self {
+        Self::ok(serde_json::json!({ key: val }))
     }
 
     pub fn paginated(data: Value, total: i64, page: i64, per_page: i64) -> Self {

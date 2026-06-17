@@ -1,16 +1,13 @@
-use auth::primitives;
-use api_core::db;
-use crate::app::models::User;
-use crate::config::AppConfig;
-use crate::app::mails::Mailer;
-use crate::error::{AppError, OrInternal};
+use crate::context::AuthContext;
+use crate::error::AuthError;
+use crate::primitives;
+use crate::primitives::TokenPair;
 
-pub async fn request_magic_link(
-    config: &AppConfig,
-    mailer: &Mailer,
+pub async fn request_magic_link<C: AuthContext>(
+    ctx: &C,
     email: &str,
-) -> Result<(), AppError> {
-    let user = User::find_by_email(email).await.or_internal()?;
+) -> Result<(), AuthError> {
+    let user = ctx.user_finder().find_by_email(email).await?;
 
     if let Some(user) = user {
         let plain_token = primitives::generate_id();
@@ -25,15 +22,15 @@ pub async fn request_magic_link(
         .bind(&user.email)
         .bind(&token_hash)
         .bind(expires_at)
-        .execute(db::pool())
+        .execute(ctx.pool())
         .await;
 
         let magic_url = format!(
             "{}/auth/magic-link/verify?token={}",
-            config.app_url, plain_token,
+            ctx.config().app_url, plain_token,
         );
 
-        if let Err(e) = mailer
+        if let Err(e) = ctx.mailer()
             .send_magic_link(&user.email, &user.name, &magic_url)
             .await
         {
@@ -47,10 +44,10 @@ pub async fn request_magic_link(
     Ok(())
 }
 
-pub async fn verify_magic_link(
-    config: &AppConfig,
+pub async fn verify_magic_link<C: AuthContext>(
+    ctx: &C,
     token: &str,
-) -> Result<auth::primitives::TokenPair, AppError> {
+) -> Result<TokenPair, AuthError> {
     let token_hash = primitives::sha256_hex(token);
 
     let record: (String, String) = sqlx::query_as(
@@ -59,32 +56,30 @@ pub async fn verify_magic_link(
          LIMIT 1",
     )
     .bind(&token_hash)
-    .fetch_optional(db::pool())
-    .await
-    .or_internal()?
-    .ok_or_else(|| AppError::BadRequest("invalid or expired magic link".into()))?;
+    .fetch_optional(ctx.pool())
+    .await?
+    .ok_or_else(|| AuthError::bad_request("invalid or expired magic link"))?;
 
     let (token_id, email) = record;
 
-    // Mark token as used
     let _ = sqlx::query("UPDATE magic_link_tokens SET used_at = NOW() WHERE id = $1")
         .bind(&token_id)
-        .execute(db::pool())
+        .execute(ctx.pool())
         .await;
 
-    let user = User::find_by_email(&email)
-        .await
-        .or_internal()?
-        .ok_or_else(|| AppError::NotFound("user not found".into()))?;
+    let user = ctx.user_finder()
+        .find_by_email(&email)
+        .await?
+        .ok_or_else(|| AuthError::not_found("user not found"))?;
 
     let family_id = primitives::generate_id();
     primitives::generate_token_pair_with_family(
         &user.id,
         &user.roles,
-        &config.auth_secret,
-        config.token_ttl,
-        config.refresh_ttl,
+        &ctx.config().auth_secret,
+        ctx.config().token_ttl,
+        ctx.config().refresh_ttl,
         Some(family_id),
     )
-    .map_err(|e| AppError::Internal(e.to_string()))
+    .map_err(AuthError::internal)
 }

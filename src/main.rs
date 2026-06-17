@@ -13,6 +13,7 @@ use rok_api_start::cli::{Cli, Command, DbCommand};
 use rok_api_start::config::AppConfig;
 use rok_api_start::start::routes;
 use rok_api_start::state::AppState;
+use auth::plugin::AuthPlugin;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -71,6 +72,15 @@ async fn serve(
     mailer,
   };
 
+  let auth = AuthPlugin::builder()
+    .magic_link()
+    .login_otp()
+    .totp_2fa()
+    .sessions()
+    .google()
+    .github()
+    .build();
+
   let cors = CorsLayer::new()
     .allow_origin(Any)
     .allow_methods(Any)
@@ -91,7 +101,7 @@ async fn serve(
     header::HeaderValue::from_static("max-age=31536000; includeSubDomains"),
   );
 
-    let app = routes::app_router(&app_state.config.auth_secret, &app_state.config.auth_strategy)
+    let app = routes::app_router(&app_state.config.auth_secret, &app_state.config.auth_strategy, &auth)
     .layer(cors)
     .layer(security_headers)
     .layer(frame_options)

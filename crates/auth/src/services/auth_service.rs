@@ -1,84 +1,78 @@
-use auth::primitives;
-use api_core::crud::FieldValue;
-use api_core::crud::CrudService;
-use auth::primitives::TokenPair;
+use crate::context::AuthContext;
+use crate::error::AuthError;
+use crate::primitives;
+use crate::primitives::TokenPair;
 
-use api_core::db;
-use crate::app::models::User;
-use crate::config::AppConfig;
-use crate::app::mails::Mailer;
-use crate::error::{AppError, OrInternal};
-
-fn to_internal<E: std::fmt::Display>(e: E) -> AppError {
-    AppError::Internal(e.to_string())
-}
-
-pub async fn register(
-    config: &AppConfig,
+pub async fn register<C: AuthContext>(
+    ctx: &C,
     email: &str,
     password: &str,
     name: &str,
-) -> Result<TokenPair, AppError> {
-    if User::find_by_email(email).await.or_internal()?.is_some() {
-        return Err(AppError::BadRequest("email already taken".into()));
+) -> Result<TokenPair, AuthError> {
+    let finder = ctx.user_finder();
+    if finder.find_by_email(email).await?.is_some() {
+        return Err(AuthError::bad_request("email already taken"));
     }
 
-    let hash = primitives::hash_password(password).map_err(to_internal)?;
+    let hash = primitives::hash_password(password).map_err(AuthError::internal)?;
 
-    let user = User::create(&[
-        ("id", FieldValue::String(primitives::generate_id())),
-        ("email", FieldValue::String(email.to_lowercase())),
-        ("password_hash", FieldValue::String(hash)),
-        ("name", FieldValue::String(name.to_string())),
-        ("roles", FieldValue::String("user".to_string())),
-    ])
-    .await
-    .or_internal()?;
+    let user = finder.create_user(&[
+        ("id", &primitives::generate_id()),
+        ("email", &email.to_lowercase()),
+        ("password_hash", &hash),
+        ("name", name),
+        ("roles", "user"),
+    ]).await?;
 
     let family_id = primitives::generate_id();
     primitives::generate_token_pair_with_family(
         &user.id,
         &user.roles,
-        &config.auth_secret,
-        config.token_ttl,
-        config.refresh_ttl,
+        &ctx.config().auth_secret,
+        ctx.config().token_ttl,
+        ctx.config().refresh_ttl,
         Some(family_id),
     )
-    .map_err(to_internal)
+    .map_err(AuthError::internal)
 }
 
-pub async fn login(
-    config: &AppConfig,
+pub async fn login<C: AuthContext>(
+    ctx: &C,
     identifier: &str,
     password: &str,
-) -> Result<TokenPair, AppError> {
-    let user = User::find_by_identifier(identifier)
-        .await
-        .or_internal()?
-        .ok_or_else(|| AppError::Unauthorized("invalid credentials".into()))?;
+) -> Result<TokenPair, AuthError> {
+    let user = ctx.user_finder()
+        .find_by_identifier(identifier)
+        .await?
+        .ok_or_else(|| AuthError::unauthorized("invalid credentials"))?;
 
-    if !primitives::verify_password(password, &user.password_hash).map_err(to_internal)? {
-        return Err(AppError::Unauthorized("invalid credentials".into()));
+    if !primitives::verify_password(password, &user.password_hash)
+        .map_err(AuthError::internal)?
+    {
+        return Err(AuthError::unauthorized("invalid credentials"));
     }
 
     let family_id = primitives::generate_id();
     primitives::generate_token_pair_with_family(
         &user.id,
         &user.roles,
-        &config.auth_secret,
-        config.token_ttl,
-        config.refresh_ttl,
+        &ctx.config().auth_secret,
+        ctx.config().token_ttl,
+        ctx.config().refresh_ttl,
         Some(family_id),
     )
-    .map_err(to_internal)
+    .map_err(AuthError::internal)
 }
 
-pub async fn refresh(
-    config: &AppConfig,
+pub async fn refresh<C: AuthContext>(
+    ctx: &C,
     refresh_token: &str,
-) -> Result<TokenPair, AppError> {
+) -> Result<TokenPair, AuthError> {
+    let config = ctx.config();
+    let pool = ctx.pool();
+
     let claims = primitives::verify_token(refresh_token, &config.auth_secret)
-        .map_err(|_| AppError::Unauthorized("invalid or expired refresh token".into()))?;
+        .map_err(|_| AuthError::unauthorized("invalid or expired refresh token"))?;
 
     let token_hash = primitives::sha256_hex(refresh_token);
     let family_id = claims.family_id.as_deref().unwrap_or("");
@@ -89,19 +83,18 @@ pub async fn refresh(
             "SELECT EXISTS(SELECT 1 FROM refresh_token_revoked_families WHERE family_id = $1)",
         )
         .bind(family_id)
-        .fetch_one(db::pool())
+        .fetch_one(pool)
         .await
         .unwrap_or(false);
 
         if family_revoked {
-            // Revoke all sessions for this user — token chain compromised
             let _ = sqlx::query(
                 "UPDATE sessions SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL",
             )
             .bind(&claims.sub)
-            .execute(db::pool())
+            .execute(pool)
             .await;
-            return Err(AppError::Unauthorized("token family revoked — all sessions terminated".into()));
+            return Err(AuthError::unauthorized("token family revoked — all sessions terminated"));
         }
     }
 
@@ -110,12 +103,11 @@ pub async fn refresh(
         "SELECT EXISTS(SELECT 1 FROM refresh_token_used WHERE token_hash = $1)",
     )
     .bind(&token_hash)
-    .fetch_one(db::pool())
+    .fetch_one(pool)
     .await
     .unwrap_or(false);
 
     if already_used {
-        // Token reuse detected — revoke entire family
         if !family_id.is_empty() {
             let _ = sqlx::query(
                 "INSERT INTO refresh_token_revoked_families (id, family_id) VALUES ($1, $2)
@@ -123,33 +115,31 @@ pub async fn refresh(
             )
             .bind(primitives::generate_id())
             .bind(family_id)
-            .execute(db::pool())
+            .execute(pool)
             .await;
 
-            // Revoke all sessions for this user
             let _ = sqlx::query(
                 "UPDATE sessions SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL",
             )
             .bind(&claims.sub)
-            .execute(db::pool())
+            .execute(pool)
             .await;
         }
-        return Err(AppError::Unauthorized("refresh token reuse detected — session terminated".into()));
+        return Err(AuthError::unauthorized("refresh token reuse detected — session terminated"));
     }
 
-    // Mark current token as used, with its family_id
+    // Mark current token as used
     let _ = sqlx::query(
         "INSERT INTO refresh_token_used (id, token_hash, family_id) VALUES ($1, $2, $3)",
     )
     .bind(primitives::generate_id())
     .bind(&token_hash)
     .bind(family_id)
-    .execute(db::pool())
+    .execute(pool)
     .await;
 
-    let user = User::find_or_fail(&claims.sub).await.or_internal()?;
+    let user = ctx.user_finder().find_or_fail(&claims.sub).await?;
 
-    // Generate new token pair with a new family_id
     let new_family_id = primitives::generate_id();
     primitives::generate_token_pair_with_family(
         &user.id,
@@ -159,15 +149,14 @@ pub async fn refresh(
         config.refresh_ttl,
         Some(new_family_id),
     )
-    .map_err(to_internal)
+    .map_err(AuthError::internal)
 }
 
-pub async fn forgot_password(
-    config: &AppConfig,
-    mailer: &Mailer,
+pub async fn forgot_password<C: AuthContext>(
+    ctx: &C,
     email: &str,
-) -> Result<(), AppError> {
-    let user = User::find_by_email(email).await.or_internal()?;
+) -> Result<(), AuthError> {
+    let user = ctx.user_finder().find_by_email(email).await?;
 
     if let Some(user) = user {
         let plain_token = primitives::generate_id();
@@ -181,15 +170,15 @@ pub async fn forgot_password(
         .bind(&user.email)
         .bind(&token_hash)
         .bind(expires_at)
-        .execute(db::pool())
+        .execute(ctx.pool())
         .await
         {
             Ok(_) => {
                 let reset_url = format!(
                     "{}/reset-password?token={}",
-                    config.app_url, plain_token,
+                    ctx.config().app_url, plain_token,
                 );
-                if let Err(e) = mailer
+                if let Err(e) = ctx.mailer()
                     .send_password_reset(&user.email, &user.name, &plain_token, &reset_url)
                     .await
                 {
@@ -207,10 +196,11 @@ pub async fn forgot_password(
     Ok(())
 }
 
-pub async fn reset_password(
+pub async fn reset_password<C: AuthContext>(
+    ctx: &C,
     token: &str,
     new_password: &str,
-) -> Result<(), AppError> {
+) -> Result<(), AuthError> {
     let token_hash = primitives::sha256_hex(token);
 
     let email: String = sqlx::query_scalar(
@@ -219,27 +209,24 @@ pub async fn reset_password(
          LIMIT 1",
     )
     .bind(&token_hash)
-    .fetch_optional(db::pool())
-    .await
-    .or_internal()?
-    .ok_or_else(|| AppError::BadRequest("invalid or expired token".into()))?;
+    .fetch_optional(ctx.pool())
+    .await?
+    .ok_or_else(|| AuthError::bad_request("invalid or expired token"))?;
 
-    let hash = primitives::hash_password(new_password).map_err(to_internal)?;
+    let hash = primitives::hash_password(new_password).map_err(AuthError::internal)?;
 
-    let user = User::find_by_email(&email)
-        .await
-        .or_internal()?
-        .ok_or_else(|| AppError::NotFound("user not found".into()))?;
+    let user = ctx.user_finder()
+        .find_by_email(&email)
+        .await?
+        .ok_or_else(|| AuthError::not_found("user not found"))?;
 
-    User::update(&user.id, &[("password_hash", FieldValue::String(hash))])
-        .await
-        .or_internal()?;
+    ctx.user_finder().update_user(&user.id, &[("password_hash", Some(&hash))]).await?;
 
     let _ = sqlx::query(
         "UPDATE password_resets SET used_at = NOW() WHERE token_hash = $1",
     )
     .bind(&token_hash)
-    .execute(db::pool())
+    .execute(ctx.pool())
     .await;
 
     Ok(())

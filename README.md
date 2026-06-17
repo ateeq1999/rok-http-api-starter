@@ -204,20 +204,30 @@ DATABASE_URL="postgres://postgres:postgres@localhost:5432/axum_app_test" cargo t
 ├── crates/
 │   ├── api-core/                     # shared generic crate (CRUD, DB, response)
 │   │   └── src/
-│   │       ├── response.rs           # ApiResponse + ErrorCode
+│   │       ├── response.rs           # ApiResponse + ErrorCode + message()/data() helpers
 │   │       ├── db.rs                 # OnceLock<PgPool>
 │   │       ├── crud.rs               # CrudService trait + FieldValue
 │   │       ├── migrations.rs         # run/rollback/fresh/refresh/status
 │   │       ├── validator.rs          # validate() + ValidationRejection
 │   │       ├── health.rs             # health check handler
 │   │       └── lib.rs                # module exports + prelude
-│   └── auth/                         # auth primitives + middleware + extractors
+│   └── auth/                         # auth plugin (self-contained)
 │       └── src/
+│           ├── plugin.rs             # AuthPlugin builder + handlers + routes
+│           ├── context.rs            # AuthContext, MailSender, UserFinder traits
+│           ├── error.rs              # AuthError enum
 │           ├── primitives.rs         # Claims, TokenPair, JWT, Argon2, SHA256
 │           ├── middleware.rs          # JwtAuthLayer, AuthStrategy (bearer/cookie)
 │           ├── extractors.rs         # AuthUser, AdminOnly
 │           ├── validators.rs         # RegisterRequest, LoginRequest, ValidatedJson<T>
 │           ├── session.rs            # Session model
+│           ├── services/             # auth services (generic over AuthContext)
+│           │   ├── auth_service.rs   # register, login, refresh, forgot/reset
+│           │   ├── magic_link_service.rs
+│           │   ├── login_otp_service.rs
+│           │   ├── otp_service.rs
+│           │   ├── session_service.rs
+│           │   └── two_factor_service.rs
 │           └── lib.rs                # module exports + prelude
 ├── src/
 │   ├── main.rs                       # binary entry point, CORS, security headers
@@ -225,36 +235,24 @@ DATABASE_URL="postgres://postgres:postgres@localhost:5432/axum_app_test" cargo t
 │   ├── config/
 │   │   ├── mod.rs
 │   │   └── app_config.rs             # AppConfig from env (AUTH_STRATEGY, etc.)
-│   ├── state.rs                      # AppState with FromRef
+│   ├── state.rs                      # AppState + AuthContext/MailSender/UserFinder impls
 │   ├── error.rs                      # AppError enum + OrInternal trait
 │   ├── storage.rs                    # avatar file I/O
 │   ├── app/
 │   │   ├── controllers/
-│   │   │   ├── auth_controller.rs    # register, login, refresh, logout, forgot/reset
-│   │   │   ├── otp_controller.rs     # send/verify OTP
-│   │   │   └── user_controller.rs    # CRUD, /me, avatar upload
+│   │   │   └── user_controller.rs    # CRUD, /me, avatar upload (only non-auth controller)
 │   │   ├── services/
-│   │   │   ├── auth_service.rs       # register, login (username/email), refresh (family revocation)
-│   │   │   ├── magic_link_service.rs # magic link request + verify
-│   │   │   ├── login_otp_service.rs  # login OTP send + verify
-│   │   │   ├── otp_service.rs        # registration OTP generation + email
-│   │   │   ├── session_service.rs    # session CRUD
 │   │   │   └── user_service.rs       # user CRUD + avatar
 │   │   ├── models/
 │   │   │   ├── user.rs               # User struct + CrudService impl
 │   │   │   └── email_verification_token.rs
-│   │   ├── mails/
-│   │   │   └── mailer.rs             # SMTP mailer via lettre
-│   │   ├── middleware/                # (empty — middleware lives in crates/auth)
-│   │   └── validators/
-│   │       ├── mod.rs                # re-exports from auth crate
-│   │       └── user.rs               # CreateUserRequest, UpdateUserRequest
+│   │   └── mails/
+│   │       └── mailer.rs             # SMTP mailer via lettre
 │   └── start/
 │       └── routes/
-│           ├── mod.rs                # app_router() with JWT layer
-│           ├── auth.rs               # auth routes with rate limiting
-│           └── api.rs                # protected API routes
-├── database/migrations/              # .up.sql / .down.sql pairs (12 migrations)
+│           ├── mod.rs                # app_router() using AuthPlugin
+│           └── api.rs                # protected API routes (user CRUD)
+├── database/migrations/              # .up.sql / .down.sql pairs (16 migrations)
 ├── templates/                        # HTML email templates
 ├── api.http                          # VS Code REST Client examples
 └── .env                              # environment overrides
@@ -262,8 +260,10 @@ DATABASE_URL="postgres://postgres:postgres@localhost:5432/axum_app_test" cargo t
 
 ## Architecture Notes
 
-- **Three-crate workspace**: `api-core` (generic), `auth` (auth primitives), root (app)
-- **AdonisJS MVC**: `controllers/`, `services/`, `models/`, `validators/`, `routes/`
+- **Three-crate workspace**: `api-core` (generic), `auth` (self-contained plugin), root (app)
+- **Auth plugin pattern**: `AuthPlugin::builder().magic_link().login_otp().totp_2fa().sessions().build()` — configure what you need, nothing else
+- **Dependency inversion**: Auth crate defines traits (`AuthContext`, `MailSender`, `UserFinder`), root implements them
+- **AdonisJS MVC**: `controllers/`, `services/`, `models/`, `routes/`
 - **No ORM** — raw SQLx queries with `CrudService` trait for generic CRUD
 - **`ValidatedJson<T>`** extractor: auto-validates request bodies (no boilerplate)
 - **`OrInternal`** trait: eliminates `.map_err(|e| AppError::Database(e.to_string()))`

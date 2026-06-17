@@ -31,3 +31,4 @@ tower_governor = "0.8"
 tower-cookies = "0.11"
 totp-rs = { version = "5.7", features = ["otpauth", "gen_secret"] }
 thiserror = "2"
+async-trait = "0.1"

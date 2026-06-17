@@ -18,6 +18,14 @@ pub enum AppError {
     Internal(String),
 }
 
+impl AppError {
+    pub fn internal(msg: impl ToString) -> Self { Self::Internal(msg.to_string()) }
+    pub fn bad_request(msg: impl ToString) -> Self { Self::BadRequest(msg.to_string()) }
+    pub fn unauthorized(msg: impl ToString) -> Self { Self::Unauthorized(msg.to_string()) }
+    pub fn not_found(msg: impl ToString) -> Self { Self::NotFound(msg.to_string()) }
+    pub fn forbidden(msg: impl ToString) -> Self { Self::Forbidden(msg.to_string()) }
+}
+
 impl From<sqlx::Error> for AppError {
     fn from(e: sqlx::Error) -> Self {
         match e {
