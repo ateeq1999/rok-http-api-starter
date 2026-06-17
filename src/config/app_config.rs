@@ -1,9 +1,12 @@
 use std::time::Duration;
 
+use auth::middleware::AuthStrategy;
+
 #[derive(Clone)]
 pub struct AppConfig {
     pub database_url: String,
     pub auth_secret: String,
+    pub auth_strategy: AuthStrategy,
     pub token_ttl: Duration,
     pub refresh_ttl: Duration,
     pub smtp_host: String,
@@ -31,6 +34,10 @@ impl AppConfig {
                 .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/axum_app".into()),
             auth_secret: std::env::var("AUTH_SECRET")
                 .unwrap_or_else(|_| "change-me-in-production".into()),
+            auth_strategy: match std::env::var("AUTH_STRATEGY").unwrap_or_default().to_lowercase().as_str() {
+                "cookie" => AuthStrategy::Cookie,
+                _ => AuthStrategy::Bearer,
+            },
             token_ttl: Duration::from_secs(
                 std::env::var("TOKEN_TTL")
                     .ok()
