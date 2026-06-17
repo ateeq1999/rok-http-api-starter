@@ -14,6 +14,8 @@ pub struct Claims {
     pub exp: usize,
     pub iat: usize,
     pub roles: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub family_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -29,6 +31,17 @@ pub fn generate_token_pair(
     token_ttl: Duration,
     refresh_ttl: Duration,
 ) -> Result<TokenPair, jsonwebtoken::errors::Error> {
+    generate_token_pair_with_family(user_id, roles, secret, token_ttl, refresh_ttl, None)
+}
+
+pub fn generate_token_pair_with_family(
+    user_id: &str,
+    roles: &str,
+    secret: &str,
+    token_ttl: Duration,
+    refresh_ttl: Duration,
+    family_id: Option<String>,
+) -> Result<TokenPair, jsonwebtoken::errors::Error> {
     let now = chrono::Utc::now().timestamp() as usize;
 
     let access_claims = Claims {
@@ -36,6 +49,7 @@ pub fn generate_token_pair(
         exp: now + token_ttl.as_secs() as usize,
         iat: now,
         roles: roles.to_string(),
+        family_id: None,
     };
 
     let refresh_claims = Claims {
@@ -43,6 +57,7 @@ pub fn generate_token_pair(
         exp: now + refresh_ttl.as_secs() as usize,
         iat: now,
         roles: roles.to_string(),
+        family_id,
     };
 
     let access_token = encode(

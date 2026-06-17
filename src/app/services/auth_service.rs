@@ -35,12 +35,14 @@ pub async fn register(
     .await
     .or_internal()?;
 
-    primitives::generate_token_pair(
+    let family_id = primitives::generate_id();
+    primitives::generate_token_pair_with_family(
         &user.id,
         &user.roles,
         &config.auth_secret,
         config.token_ttl,
         config.refresh_ttl,
+        Some(family_id),
     )
     .map_err(to_internal)
 }
@@ -59,12 +61,14 @@ pub async fn login(
         return Err(AppError::Unauthorized("invalid email or password".into()));
     }
 
-    primitives::generate_token_pair(
+    let family_id = primitives::generate_id();
+    primitives::generate_token_pair_with_family(
         &user.id,
         &user.roles,
         &config.auth_secret,
         config.token_ttl,
         config.refresh_ttl,
+        Some(family_id),
     )
     .map_err(to_internal)
 }
@@ -77,7 +81,31 @@ pub async fn refresh(
         .map_err(|_| AppError::Unauthorized("invalid or expired refresh token".into()))?;
 
     let token_hash = primitives::sha256_hex(refresh_token);
+    let family_id = claims.family_id.as_deref().unwrap_or("");
 
+    // Check if family is revoked (replay attack detected upstream)
+    if !family_id.is_empty() {
+        let family_revoked: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM refresh_token_revoked_families WHERE family_id = $1)",
+        )
+        .bind(family_id)
+        .fetch_one(db::pool())
+        .await
+        .unwrap_or(false);
+
+        if family_revoked {
+            // Revoke all sessions for this user — token chain compromised
+            let _ = sqlx::query(
+                "UPDATE sessions SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL",
+            )
+            .bind(&claims.sub)
+            .execute(db::pool())
+            .await;
+            return Err(AppError::Unauthorized("token family revoked — all sessions terminated".into()));
+        }
+    }
+
+    // Check if this exact token was already used (replay)
     let already_used: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM refresh_token_used WHERE token_hash = $1)",
     )
@@ -87,25 +115,49 @@ pub async fn refresh(
     .unwrap_or(false);
 
     if already_used {
-        return Err(AppError::Unauthorized("refresh token already used".into()));
+        // Token reuse detected — revoke entire family
+        if !family_id.is_empty() {
+            let _ = sqlx::query(
+                "INSERT INTO refresh_token_revoked_families (id, family_id) VALUES ($1, $2)
+                 ON CONFLICT (family_id) DO NOTHING",
+            )
+            .bind(primitives::generate_id())
+            .bind(family_id)
+            .execute(db::pool())
+            .await;
+
+            // Revoke all sessions for this user
+            let _ = sqlx::query(
+                "UPDATE sessions SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL",
+            )
+            .bind(&claims.sub)
+            .execute(db::pool())
+            .await;
+        }
+        return Err(AppError::Unauthorized("refresh token reuse detected — session terminated".into()));
     }
 
+    // Mark current token as used, with its family_id
     let _ = sqlx::query(
-        "INSERT INTO refresh_token_used (id, token_hash) VALUES ($1, $2)",
+        "INSERT INTO refresh_token_used (id, token_hash, family_id) VALUES ($1, $2, $3)",
     )
     .bind(primitives::generate_id())
     .bind(&token_hash)
+    .bind(family_id)
     .execute(db::pool())
     .await;
 
     let user = User::find_or_fail(&claims.sub).await.or_internal()?;
 
-    primitives::generate_token_pair(
+    // Generate new token pair with a new family_id
+    let new_family_id = primitives::generate_id();
+    primitives::generate_token_pair_with_family(
         &user.id,
         &user.roles,
         &config.auth_secret,
         config.token_ttl,
         config.refresh_ttl,
+        Some(new_family_id),
     )
     .map_err(to_internal)
 }

@@ -1,7 +1,9 @@
 use clap::Parser;
 use sqlx::PgPool;
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{Any, CorsLayer};
+use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::TraceLayer;
+use axum::http::header;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
@@ -73,8 +75,31 @@ async fn serve(config: AppConfig, pool: PgPool) -> anyhow::Result<()> {
         mailer,
     };
 
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
+    let security_headers = SetResponseHeaderLayer::overriding(
+        header::X_CONTENT_TYPE_OPTIONS,
+        header::HeaderValue::from_static("nosniff"),
+    );
+
+    let frame_options = SetResponseHeaderLayer::overriding(
+        header::X_FRAME_OPTIONS,
+        header::HeaderValue::from_static("DENY"),
+    );
+
+    let hsts = SetResponseHeaderLayer::overriding(
+        header::HeaderName::from_static("strict-transport-security"),
+        header::HeaderValue::from_static("max-age=31536000; includeSubDomains"),
+    );
+
     let app = routes::app_router(&app_state.config.auth_secret)
-        .layer(CorsLayer::permissive())
+        .layer(cors)
+        .layer(security_headers)
+        .layer(frame_options)
+        .layer(hsts)
         .layer(TraceLayer::new_for_http())
         .with_state(app_state);
 
