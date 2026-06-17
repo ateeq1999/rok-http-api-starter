@@ -8,12 +8,8 @@ pub struct Cli {
 
 #[derive(clap::Subcommand)]
 pub enum Command {
-    /// Start the HTTP server
-    Server {
-        /// Run pending migrations before starting
-        #[arg(long)]
-        run_migrations: bool,
-    },
+    /// Start the HTTP server (runs migrations automatically)
+    Server,
     /// Database migration commands
     Db {
         #[command(subcommand)]

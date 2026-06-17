@@ -26,10 +26,7 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        None | Some(Command::Server { run_migrations: false }) => {
-            start_server().await?;
-        }
-        Some(Command::Server { run_migrations: true }) => {
+        None | Some(Command::Server) => {
             let config = AppConfig::from_env();
             let pool = PgPool::connect(&config.database_url).await?;
             api_core::migrations::run(&pool).await?;
@@ -61,13 +58,6 @@ async fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
-}
-
-async fn start_server() -> anyhow::Result<()> {
-    let config = AppConfig::from_env();
-    let pool = PgPool::connect(&config.database_url).await?;
-    db::init(pool.clone());
-    serve(config, pool).await
 }
 
 async fn serve(config: AppConfig, pool: PgPool) -> anyhow::Result<()> {

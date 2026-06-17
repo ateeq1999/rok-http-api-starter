@@ -1,7 +1,7 @@
 ### ─── Variables ───────────────────────────────────────────
 
 @baseUrl = http://localhost:8080/api/v1
-@token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJlM2EzMWVlMC0zMGZkLTRiZDMtYjFkZi1iNjI4OWQxNWMzMmIiLCJleHAiOjE3ODA4NDc4MjUsImlhdCI6MTc4MDg0NDIyNSwicm9sZXMiOiJ1c2VyIn0.z6-lnuyf4XSlyK6-uWOtcvrVVyMbrtOe7LtaLYyeWRE
+@token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1NzI5NzEzNC0yODBhLTQxMmEtOGRmNC0yNzk3MDYyMWJlNGMiLCJleHAiOjE3ODE3MDA0NzQsImlhdCI6MTc4MTY5Njg3NCwicm9sZXMiOiJ1c2VyIn0.UAaZL4TKntkqKD9DK5d368TZdlfXrcz8yilKO-DOWSU
 @refreshToken=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIiwidHlwIjoicmVmcmVzaCIsImV4cCI6MTc4MzE1MzE2MywiaWF0IjoxNzgwNTYxMTYzLCJpc3MiOiJheHVtLWFwcCIsImZpZCI6IjBmZGVkODkzLWVlZDItNDAzZC1hMjA2LWRiZTY3OWI4YjNmMSJ9.oJkoTlJdcpw_bV59jaCe1jl9m4R7rGTiPnmA-sY9KgI
 @userId = 1
 
@@ -48,7 +48,7 @@ POST {{baseUrl}}/auth/forgot-password
 Content-Type: application/json
 
 {
-  "email": "user@example.com"
+  "email": "admin@example.com"
 }
 
 ### Reset Password
@@ -64,10 +64,11 @@ Content-Type: application/json
 
 ### Send OTP
 POST {{baseUrl}}/otp/send
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-  "email": "user@example.com"
+  "email": "admin@example.com"
 }
 
 ### Verify OTP
