@@ -16,6 +16,14 @@ pub enum ValidationRejection {
     ValidationError(validator::ValidationErrors),
 }
 
+impl std::fmt::Display for ValidationRejection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ValidationError(errors) => write!(f, "{errors}"),
+        }
+    }
+}
+
 impl IntoResponse for ValidationRejection {
     fn into_response(self) -> Response {
         match self {

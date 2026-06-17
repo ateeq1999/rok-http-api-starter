@@ -6,11 +6,9 @@ use api_core::response::{ApiResponse, ErrorCode};
 pub enum AppError {
     Database(String),
     NotFound(String),
-    #[allow(dead_code)]
+    Unauthorized(String),
     Forbidden(String),
-    #[allow(dead_code)]
     BadRequest(String),
-    #[allow(dead_code)]
     Internal(String),
 }
 
@@ -27,6 +25,7 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (code, msg) = match self {
             Self::NotFound(m) => (ErrorCode::NotFound, m),
+            Self::Unauthorized(m) => (ErrorCode::Unauthorized, m),
             Self::Forbidden(m) => (ErrorCode::Forbidden, m),
             Self::BadRequest(m) => (ErrorCode::BadRequest, m),
             Self::Database(m) => (ErrorCode::InternalServerError, m),
@@ -41,6 +40,7 @@ impl std::fmt::Display for AppError {
         match self {
             Self::Database(msg) => write!(f, "{msg}"),
             Self::NotFound(msg) => write!(f, "{msg}"),
+            Self::Unauthorized(msg) => write!(f, "{msg}"),
             Self::Forbidden(msg) => write!(f, "{msg}"),
             Self::BadRequest(msg) => write!(f, "{msg}"),
             Self::Internal(msg) => write!(f, "{msg}"),

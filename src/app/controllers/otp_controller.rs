@@ -1,64 +1,21 @@
 use axum::extract::State;
 use axum::Json;
 
-use api_core::auth;
-use api_core::crud::FieldValue;
-use api_core::crud::CrudService;
 use api_core::response::ApiResponse;
 
 use crate::error::AppError;
-use crate::app::models::EmailVerificationToken;
-use crate::app::models::User;
+use crate::app::services;
 use crate::state::AppState;
 use crate::app::validators;
 use crate::app::validators::otp::*;
-
-fn generate_otp(length: u32) -> String {
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
-    (0..length)
-        .map(|_| rng.gen_range(0..10).to_string())
-        .collect()
-}
 
 pub async fn send(
     State(state): State<AppState>,
     Json(body): Json<SendOtpRequest>,
 ) -> Result<ApiResponse, AppError> {
-    let body =
-        validators::validate(body).map_err(|_| AppError::BadRequest("invalid request".into()))?;
-
-    let user = User::find_by_email(&body.email)
-        .await?
-        .ok_or_else(|| AppError::NotFound("user not found".into()))?;
-
-    let code = generate_otp(state.config.otp_length);
-    let hash = auth::sha256_hex(&code);
-    let expires_at = chrono::Utc::now() + chrono::Duration::hours(24);
-
-    EmailVerificationToken::invalidate_previous(&user.id).await?;
-
-    EmailVerificationToken::create(&[
-        ("id", FieldValue::String(auth::generate_id())),
-        ("user_id", FieldValue::String(user.id.clone())),
-        ("token_hash", FieldValue::String(hash)),
-        ("expires_at", FieldValue::DateTime(expires_at)),
-    ])
-    .await?;
-
-    let verify_url = format!(
-        "{}/api/v1/otp/verify?code={}&email={}",
-        state.config.app_url, code, body.email
-    );
-
-    if let Err(e) = state
-        .mailer
-        .send_otp(&body.email, &user.name, &code, &verify_url)
-        .await
-    {
-        tracing::error!("failed to send OTP email: {e}");
-    }
-
+    let body = validators::validate(body)
+        .map_err(|_| AppError::BadRequest("invalid request".into()))?;
+    services::otp_service::send(&state.config, &state.mailer, &body.email).await?;
     Ok(ApiResponse::ok(
         serde_json::json!({ "message": "verification email sent" }),
     ))
@@ -67,23 +24,9 @@ pub async fn send(
 pub async fn verify(
     Json(body): Json<VerifyOtpRequest>,
 ) -> Result<ApiResponse, AppError> {
-    let body =
-        validators::validate(body).map_err(|_| AppError::BadRequest("invalid request".into()))?;
-
-    let user = User::find_by_email(&body.email)
-        .await?
-        .ok_or_else(|| AppError::NotFound("user not found".into()))?;
-
-    let hash = auth::sha256_hex(&body.code);
-
-    let token = EmailVerificationToken::find_valid(&user.id, &hash)
-        .await?
-        .ok_or_else(|| AppError::BadRequest("invalid or expired code".into()))?;
-
-    EmailVerificationToken::mark_used(&token.id).await?;
-
-    User::verify_email(&user.id).await?;
-
+    let body = validators::validate(body)
+        .map_err(|_| AppError::BadRequest("invalid request".into()))?;
+    services::otp_service::verify(&body.email, &body.code).await?;
     Ok(ApiResponse::ok(
         serde_json::json!({ "message": "email verified" }),
     ))
