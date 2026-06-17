@@ -25,6 +25,8 @@ pub fn public_routes() -> Router<AppState> {
     let strict_routes = Router::new()
         .route("/register", post(auth_controller::register))
         .route("/login", post(auth_controller::login))
+        .route("/otp/login/send", post(auth_controller::login_otp_send))
+        .route("/otp/login/verify", post(auth_controller::login_otp_verify))
         .layer(GovernorLayer::new(strict_config));
 
     let generous_routes = Router::new()
@@ -32,10 +34,15 @@ pub fn public_routes() -> Router<AppState> {
             "/forgot-password",
             post(auth_controller::forgot_password),
         )
+        .route(
+            "/magic-link",
+            post(auth_controller::magic_link_request),
+        )
         .layer(GovernorLayer::new(generous_config));
 
     let unthrottled_routes = Router::new()
-        .route("/reset-password", post(auth_controller::reset_password));
+        .route("/reset-password", post(auth_controller::reset_password))
+        .route("/magic-link/verify", post(auth_controller::magic_link_verify));
 
     strict_routes.merge(generous_routes).merge(unthrottled_routes)
 }

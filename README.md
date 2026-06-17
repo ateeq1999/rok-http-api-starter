@@ -1,6 +1,6 @@
 # rok-api-starter
 
-Axum + SQLx API starter. Features auth (JWT, Argon2), CRUD service, email (OTP, password reset), avatar upload, PostgreSQL migrations, and CLI commands.
+Axum + SQLx API starter with AdonisJS-style MVC layout. Auth (JWT + Argon2), cookie or bearer sessions, rate limiting, refresh token rotation with family-based revocation, CRUD service, email (OTP, password reset), avatar upload, PostgreSQL migrations, and CLI.
 
 ```
 cargo run                    # start server
@@ -62,6 +62,7 @@ cargo run
 |---|---|---|
 | `DATABASE_URL` | `postgres://postgres:postgres@localhost:5432/axum_app` | PostgreSQL connection string |
 | `AUTH_SECRET` | `change-me-in-production` | JWT signing secret |
+| `AUTH_STRATEGY` | `bearer` | Auth strategy: `bearer` (Authorization header) or `cookie` (HTTP-only cookies) |
 | `TOKEN_TTL` | `3600` | Access token TTL (seconds) |
 | `REFRESH_TTL` | `2592000` | Refresh token TTL (seconds) |
 | `SMTP_HOST` | `localhost` | SMTP server hostname |
@@ -78,7 +79,7 @@ cargo run
 | Command | Description |
 |---|---|
 | `cargo run` | Start the HTTP server |
-| `cargo run -- server --run-migrations` | Run migrations then start server |
+| `cargo run -- server` | Start the HTTP server (migrations run automatically) |
 | `cargo run -- db migrate` | Apply pending migrations |
 | `cargo run -- db rollback` | Roll back the last migration |
 | `cargo run -- db fresh` | Drop all tables then re-run all migrations |
@@ -97,14 +98,18 @@ Migrations use `.up.sql` / `.down.sql` pairs in `database/migrations/`.
 
 ### Authentication (`/api/v1/auth`)
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `POST` | `/auth/register` | — | Register (password: 8+ chars, upper + lower + digit + special) |
-| `POST` | `/auth/login` | — | Login, returns access + refresh tokens |
-| `POST` | `/auth/refresh` | — | Rotate a refresh token |
-| `POST` | `/auth/logout` | Bearer | Logout current session |
-| `POST` | `/auth/forgot-password` | — | Request password reset email |
-| `POST` | `/auth/reset-password` | — | Submit reset token + new password |
+| Method | Path | Auth | Rate Limit | Description |
+|--------|------|------|------------|-------------|
+| `POST` | `/auth/register` | — | 5 burst, 1/sec | Register (password: 8+ chars, upper + lower + digit + special) |
+| `POST` | `/auth/login` | — | 5 burst, 1/sec | Login with email **or** username, returns access + refresh tokens |
+| `POST` | `/auth/refresh` | — | — | Rotate a refresh token (family-based reuse detection) |
+| `POST` | `/auth/logout` | Bearer | — | Logout current session |
+| `POST` | `/auth/forgot-password` | — | 10 burst, 2/sec | Request password reset email |
+| `POST` | `/auth/reset-password` | — | — | Submit reset token + new password |
+| `POST` | `/auth/magic-link` | — | 10 burst, 2/sec | Request magic link email (15 min expiry) |
+| `GET` | `/auth/magic-link/verify?token=...` | — | — | Verify magic link, returns tokens (sets cookies if cookie mode) |
+| `POST` | `/auth/otp/login/send` | — | 5 burst, 1/sec | Send login OTP code via email (10 min expiry) |
+| `POST` | `/auth/otp/login/verify` | — | 5 burst, 1/sec | Verify login OTP code, returns tokens |
 
 ### Profile (`/api/v1`)
 
@@ -129,6 +134,21 @@ Migrations use `.up.sql` / `.down.sql` pairs in `database/migrations/`.
 |--------|------|------|-------------|
 | `POST` | `/otp/send` | — | Send verification OTP email |
 | `POST` | `/otp/verify` | — | Submit verification code |
+
+## Auth Strategy
+
+Set `AUTH_STRATEGY` to switch between bearer tokens and cookie-based sessions:
+
+- **`bearer`** (default): Tokens returned in JSON response body. Client sends `Authorization: Bearer <token>`.
+- **`cookie`**: Tokens set as HTTP-only cookies (`access_token`, `refresh_token`). Middleware reads from cookies automatically. Use for browser-based apps.
+
+## Security Features
+
+- **Refresh token rotation** with family-based revocation — token reuse triggers family-wide revocation and all user sessions are terminated
+- **Rate limiting** on auth endpoints via `tower-governor` (IP-based)
+- **Security headers**: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Strict-Transport-Security`
+- **CORS** enabled (permissive in dev — tighten for production)
+- **Password policy**: 8+ chars, uppercase, lowercase, digit, special character
 
 ## Password Policy
 
@@ -164,49 +184,75 @@ DATABASE_URL="postgres://postgres:postgres@localhost:5432/axum_app_test" cargo t
 ## Project Structure
 
 ```
-├── Cargo.toml                    # workspace root
-├── crates/api-core/              # shared generic crate
-│   └── src/
-│       ├── response.rs           # ApiResponse + ErrorCode
-│       ├── db.rs                 # OnceLock<PgPool>
-│       ├── crud.rs               # CrudService trait + FieldValue
-│       ├── auth.rs               # JWT, argon2, sha2, uuid utils
-│       ├── migrations.rs         # run/rollback/fresh/refresh/status
-│       ├── validator.rs          # validate() + ValidationRejection
-│       ├── health.rs             # health check handler
-│       └── prelude.rs            # re-exports
+├── Cargo.toml                        # workspace root
+├── crates/
+│   ├── api-core/                     # shared generic crate (CRUD, DB, response)
+│   │   └── src/
+│   │       ├── response.rs           # ApiResponse + ErrorCode
+│   │       ├── db.rs                 # OnceLock<PgPool>
+│   │       ├── crud.rs               # CrudService trait + FieldValue
+│   │       ├── migrations.rs         # run/rollback/fresh/refresh/status
+│   │       ├── validator.rs          # validate() + ValidationRejection
+│   │       ├── health.rs             # health check handler
+│   │       └── lib.rs                # module exports + prelude
+│   └── auth/                         # auth primitives + middleware + extractors
+│       └── src/
+│           ├── primitives.rs         # Claims, TokenPair, JWT, Argon2, SHA256
+│           ├── middleware.rs          # JwtAuthLayer, AuthStrategy (bearer/cookie)
+│           ├── extractors.rs         # AuthUser, AdminOnly
+│           ├── validators.rs         # RegisterRequest, LoginRequest, ValidatedJson<T>
+│           ├── session.rs            # Session model
+│           └── lib.rs                # module exports + prelude
 ├── src/
-│   ├── main.rs                   # binary entry point
-│   ├── lib.rs                    # library root (exposes modules)
-│   ├── config.rs                 # AppConfig from env
-│   ├── state.rs                  # AppState with FromRef
-│   ├── auth.rs                   # AuthUser / AdminOnly extractors
-│   ├── error.rs                  # AppError enum
-│   ├── db.rs                     # re-exports api_core::db
-│   ├── response.rs               # re-exports api_core::response
-│   ├── storage.rs                # avatar file I/O
-│   ├── mail.rs                   # SMTP mailer via lettre
-│   ├── models/
-│   │   ├── user.rs               # User struct + CrudService impl
-│   │   └── email_verification_token.rs
-│   ├── controllers/
-│   │   ├── auth.rs               # register, login, refresh, logout, forgot/reset
-│   │   ├── otp.rs                # send/verify OTP
-│   │   └── user.rs               # CRUD, /me, avatar upload
-│   ├── routes/
-│   │   ├── mod.rs                # Router + ServeDir for uploads
-│   │   ├── auth.rs
-│   │   └── api.rs
-│   └── validators/
-│       ├── auth.rs               # RegisterRequest, etc. + password validator
-│       ├── otp.rs
-│       └── user.rs
-├── database/migrations/          # .up.sql / .down.sql pairs
-├── templates/                    # HTML email templates
-├── tests/api.rs                  # integration tests
-├── api.http                      # VS Code REST Client examples
-└── .env                          # environment overrides
+│   ├── main.rs                       # binary entry point, CORS, security headers
+│   ├── lib.rs                        # library root
+│   ├── config/
+│   │   ├── mod.rs
+│   │   └── app_config.rs             # AppConfig from env (AUTH_STRATEGY, etc.)
+│   ├── state.rs                      # AppState with FromRef
+│   ├── error.rs                      # AppError enum + OrInternal trait
+│   ├── storage.rs                    # avatar file I/O
+│   ├── app/
+│   │   ├── controllers/
+│   │   │   ├── auth_controller.rs    # register, login, refresh, logout, forgot/reset
+│   │   │   ├── otp_controller.rs     # send/verify OTP
+│   │   │   └── user_controller.rs    # CRUD, /me, avatar upload
+│   │   ├── services/
+│   │   │   ├── auth_service.rs       # register, login (username/email), refresh (family revocation)
+│   │   │   ├── magic_link_service.rs # magic link request + verify
+│   │   │   ├── login_otp_service.rs  # login OTP send + verify
+│   │   │   ├── otp_service.rs        # registration OTP generation + email
+│   │   │   ├── session_service.rs    # session CRUD
+│   │   │   └── user_service.rs       # user CRUD + avatar
+│   │   ├── models/
+│   │   │   ├── user.rs               # User struct + CrudService impl
+│   │   │   └── email_verification_token.rs
+│   │   ├── mails/
+│   │   │   └── mailer.rs             # SMTP mailer via lettre
+│   │   ├── middleware/                # (empty — middleware lives in crates/auth)
+│   │   └── validators/
+│   │       ├── mod.rs                # re-exports from auth crate
+│   │       └── user.rs               # CreateUserRequest, UpdateUserRequest
+│   └── start/
+│       └── routes/
+│           ├── mod.rs                # app_router() with JWT layer
+│           ├── auth.rs               # auth routes with rate limiting
+│           └── api.rs                # protected API routes
+├── database/migrations/              # .up.sql / .down.sql pairs (12 migrations)
+├── templates/                        # HTML email templates
+├── api.http                          # VS Code REST Client examples
+└── .env                              # environment overrides
 ```
+
+## Architecture Notes
+
+- **Three-crate workspace**: `api-core` (generic), `auth` (auth primitives), root (app)
+- **AdonisJS MVC**: `controllers/`, `services/`, `models/`, `validators/`, `routes/`
+- **No ORM** — raw SQLx queries with `CrudService` trait for generic CRUD
+- **`ValidatedJson<T>`** extractor: auto-validates request bodies (no boilerplate)
+- **`OrInternal`** trait: eliminates `.map_err(|e| AppError::Database(e.to_string()))`
+- **Rate limiting**: per-route via `tower-governor` on sensitive auth endpoints
+- **Session management**: `sessions` table tracks active sessions, supports per-device revocation
 
 ## API Client
 

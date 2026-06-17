@@ -89,6 +89,46 @@ pub struct VerifyOtpRequest {
     pub code: String,
 }
 
+// ── Magic link DTOs ──────────────────────────────────────────────
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct MagicLinkRequest {
+    #[validate(email)]
+    pub email: String,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct MagicLinkVerifyRequest {
+    #[validate(length(min = 1))]
+    pub token: String,
+}
+
+// ── Login OTP DTOs ───────────────────────────────────────────────
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct LoginOtpSendRequest {
+    #[validate(email)]
+    pub email: String,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct LoginOtpVerifyRequest {
+    #[validate(email)]
+    pub email: String,
+    #[validate(length(min = 1))]
+    pub code: String,
+}
+
+// ── Username/email login DTO ─────────────────────────────────────
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct UsernameLoginRequest {
+    #[validate(length(min = 1, max = 255))]
+    pub identifier: String,
+    #[validate(length(min = 1))]
+    pub password: String,
+}
+
 // ── ValidatedJson extractor ──────────────────────────────────────
 
 pub struct ValidatedJson<T>(pub T);

@@ -54,6 +54,33 @@ impl Mailer {
         self.send_raw(to, "Reset your password", &html).await
     }
 
+    pub async fn send_magic_link(
+        &self,
+        to: &str,
+        name: &str,
+        magic_url: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let html = Self::render(
+            include_str!("../../../templates/email_magic_link.html"),
+            &[("name", name), ("magic_url", magic_url)],
+        );
+        self.send_raw(to, "Sign in with magic link", &html).await
+    }
+
+    pub async fn send_login_otp(
+        &self,
+        to: &str,
+        name: &str,
+        code: &str,
+        verify_url: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let html = Self::render(
+            include_str!("../../../templates/email_login_otp.html"),
+            &[("name", name), ("code", code), ("verify_url", verify_url)],
+        );
+        self.send_raw(to, "Your sign-in code", &html).await
+    }
+
     async fn send_raw(
         &self,
         to: &str,

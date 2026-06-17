@@ -11,7 +11,11 @@ use crate::config::AuthStrategy;
 use crate::error::AppError;
 use crate::state::AppState;
 use auth::validators::ValidatedJson;
-use auth::validators::{RefreshRequest, RegisterRequest, LoginRequest, ForgotPasswordRequest, ResetPasswordRequest};
+use auth::validators::{
+    ForgotPasswordRequest, LoginOtpSendRequest, LoginOtpVerifyRequest,
+    LoginRequest, MagicLinkRequest,
+    RefreshRequest, RegisterRequest, ResetPasswordRequest,
+};
 
 fn token_response(state: &AppState, tokens: &TokenPair, message: &str) -> Response {
     if state.config.auth_strategy == AuthStrategy::Cookie {
@@ -74,7 +78,6 @@ pub async fn logout(
         let body = ApiResponse::ok(serde_json::json!({ "message": "logged out" }));
         let mut response = body.into_response();
         let headers = response.headers_mut();
-        // Clear cookies by setting expired
         let clear_access = "access_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0";
         let clear_refresh = "refresh_token=; Path=/api/v1/auth/refresh; HttpOnly; SameSite=Lax; Max-Age=0";
         headers.append(header::SET_COOKIE, clear_access.parse().unwrap());
@@ -98,4 +101,46 @@ pub async fn reset_password(
 ) -> Result<ApiResponse, AppError> {
     services::auth_service::reset_password(&body.token, &body.password).await?;
     Ok(ApiResponse::ok(serde_json::json!({ "message": "password reset" })))
+}
+
+// ── Phase 2: Passwordless sign-in ────────────────────────────────
+
+pub async fn magic_link_request(
+    State(state): State<AppState>,
+    ValidatedJson(body): ValidatedJson<MagicLinkRequest>,
+) -> Result<ApiResponse, AppError> {
+    services::magic_link_service::request_magic_link(
+        &state.config, &state.mailer, &body.email,
+    ).await?;
+    Ok(ApiResponse::ok(serde_json::json!({ "message": "magic link sent" })))
+}
+
+pub async fn magic_link_verify(
+    State(state): State<AppState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Response, AppError> {
+    let token = params.get("token")
+        .ok_or_else(|| AppError::BadRequest("missing token parameter".into()))?;
+    let tokens = services::magic_link_service::verify_magic_link(&state.config, token).await?;
+    Ok(token_response(&state, &tokens, "authenticated via magic link"))
+}
+
+pub async fn login_otp_send(
+    State(state): State<AppState>,
+    ValidatedJson(body): ValidatedJson<LoginOtpSendRequest>,
+) -> Result<ApiResponse, AppError> {
+    services::login_otp_service::send_login_otp(
+        &state.config, &state.mailer, &body.email,
+    ).await?;
+    Ok(ApiResponse::ok(serde_json::json!({ "message": "login code sent" })))
+}
+
+pub async fn login_otp_verify(
+    State(state): State<AppState>,
+    ValidatedJson(body): ValidatedJson<LoginOtpVerifyRequest>,
+) -> Result<Response, AppError> {
+    let tokens = services::login_otp_service::verify_login_otp(
+        &state.config, &body.email, &body.code,
+    ).await?;
+    Ok(token_response(&state, &tokens, "authenticated via OTP"))
 }

@@ -13,6 +13,7 @@ pub struct User {
     pub password_hash: String,
     pub name: String,
     pub roles: String,
+    pub username: Option<String>,
     pub avatar_url: Option<String>,
     pub email_verified_at: Option<chrono::DateTime<chrono::Utc>>,
     pub created_at: chrono::DateTime<chrono::Utc>,
@@ -33,6 +34,22 @@ impl User {
             .bind(email.to_lowercase())
             .fetch_optional(db::pool())
             .await
+    }
+
+    pub async fn find_by_username(username: &str) -> Result<Option<Self>, sqlx::Error> {
+        sqlx::query_as::<_, Self>("SELECT * FROM users WHERE username = $1")
+            .bind(username)
+            .fetch_optional(db::pool())
+            .await
+    }
+
+    pub async fn find_by_identifier(identifier: &str) -> Result<Option<Self>, sqlx::Error> {
+        sqlx::query_as::<_, Self>(
+            "SELECT * FROM users WHERE email = $1 OR username = $1",
+        )
+        .bind(identifier)
+        .fetch_optional(db::pool())
+        .await
     }
 
     pub async fn verify_email(id: &str) -> Result<Self, sqlx::Error> {

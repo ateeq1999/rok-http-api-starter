@@ -49,16 +49,16 @@ pub async fn register(
 
 pub async fn login(
     config: &AppConfig,
-    email: &str,
+    identifier: &str,
     password: &str,
 ) -> Result<TokenPair, AppError> {
-    let user = User::find_by_email(email)
+    let user = User::find_by_identifier(identifier)
         .await
         .or_internal()?
-        .ok_or_else(|| AppError::Unauthorized("invalid email or password".into()))?;
+        .ok_or_else(|| AppError::Unauthorized("invalid credentials".into()))?;
 
     if !primitives::verify_password(password, &user.password_hash).map_err(to_internal)? {
-        return Err(AppError::Unauthorized("invalid email or password".into()));
+        return Err(AppError::Unauthorized("invalid credentials".into()));
     }
 
     let family_id = primitives::generate_id();

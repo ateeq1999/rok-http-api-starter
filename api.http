@@ -10,7 +10,7 @@
 ### Health Check
 GET {{baseUrl}}/health
 
-### ─── Auth ────────────────────────────────────────────────
+### ─── Auth: Core ──────────────────────────────────────────
 
 ### Register
 POST {{baseUrl}}/auth/register
@@ -22,12 +22,21 @@ Content-Type: application/json
   "name": "John Doe"
 }
 
-### Login
+### Login (email or username)
 POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
 {
   "email": "admin@example.com",
+  "password": "Password1!"
+}
+
+### Login with username
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "johndoe",
   "password": "Password1!"
 }
 
@@ -60,9 +69,41 @@ Content-Type: application/json
   "password": "Newpassword1!"
 }
 
+### ─── Auth: Magic Link ────────────────────────────────────
+
+### Request Magic Link
+POST {{baseUrl}}/auth/magic-link
+Content-Type: application/json
+
+{
+  "email": "admin@example.com"
+}
+
+### Verify Magic Link (use token from email)
+GET {{baseUrl}}/auth/magic-link/verify?token=TOKEN_FROM_EMAIL
+
+### ─── Auth: Login OTP ─────────────────────────────────────
+
+### Send Login OTP
+POST {{baseUrl}}/auth/otp/login/send
+Content-Type: application/json
+
+{
+  "email": "admin@example.com"
+}
+
+### Verify Login OTP
+POST {{baseUrl}}/auth/otp/login/verify
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "code": "123456"
+}
+
 ### ─── OTP / Email Verification ────────────────────────────
 
-### Send OTP
+### Send Registration OTP
 POST {{baseUrl}}/otp/send
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -71,7 +112,7 @@ Content-Type: application/json
   "email": "admin@example.com"
 }
 
-### Verify OTP
+### Verify Registration OTP
 POST {{baseUrl}}/otp/verify
 Authorization: Bearer {{token}}
 Content-Type: application/json
