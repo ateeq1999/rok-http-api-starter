@@ -67,6 +67,12 @@ pub trait CrudService: Sized + for<'r> FromRow<'r, PgRow> + Send + Sync + Unpin 
             .await
     }
 
+    async fn find_or_fail(id: &str) -> Result<Self, sqlx::Error> {
+        Self::find_by_id(id)
+            .await?
+            .ok_or(sqlx::Error::RowNotFound)
+    }
+
     async fn all() -> Result<Vec<Self>, sqlx::Error> {
         let sql = format!("SELECT * FROM {}", Self::TABLE);
         sqlx::query_as::<_, Self>(&sql).fetch_all(Self::pool()).await

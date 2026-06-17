@@ -26,3 +26,4 @@ dotenvy = "0.15"
 rand = "0.8"
 validator = { version = "0.19", features = ["derive"] }
 tower = { version = "0.5", features = ["util"] }
+thiserror = "2"

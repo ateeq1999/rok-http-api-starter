@@ -4,18 +4,15 @@ use api_core::crud::CrudService;
 
 use crate::app::models::User;
 use crate::config::AppConfig;
-use crate::error::AppError;
+use crate::error::{AppError, OrInternal};
 use crate::storage;
 
 pub async fn list() -> Result<Vec<User>, AppError> {
-    User::all().await.map_err(|e| AppError::Database(e.to_string()))
+    User::all().await.or_internal()
 }
 
 pub async fn get_by_id(id: &str) -> Result<User, AppError> {
-    User::find_by_id(id)
-        .await
-        .map_err(|e| AppError::Database(e.to_string()))?
-        .ok_or_else(|| AppError::NotFound("user not found".into()))
+    User::find_or_fail(id).await.or_internal()
 }
 
 pub async fn create(
@@ -35,7 +32,7 @@ pub async fn create(
         ("roles", FieldValue::String(roles.to_string())),
     ])
     .await
-    .map_err(|e| AppError::Database(e.to_string()))
+    .or_internal()
 }
 
 pub async fn update(
@@ -44,15 +41,6 @@ pub async fn update(
     name: Option<&str>,
     roles: Option<&str>,
 ) -> Result<User, AppError> {
-    let exists = User::find_by_id(id)
-        .await
-        .map_err(|e| AppError::Database(e.to_string()))?
-        .is_some();
-
-    if !exists {
-        return Err(AppError::NotFound("user not found".into()));
-    }
-
     let mut fields: Vec<(&str, FieldValue)> = Vec::new();
     if let Some(email) = email {
         fields.push(("email", FieldValue::String(email.to_lowercase())));
@@ -65,37 +53,19 @@ pub async fn update(
     }
 
     if fields.is_empty() {
-        return User::find_by_id(id)
-            .await
-            .map_err(|e| AppError::Database(e.to_string()))?
-            .ok_or_else(|| AppError::NotFound("user not found".into()));
+        return User::find_or_fail(id).await.or_internal();
     }
 
-    User::update(id, &fields)
-        .await
-        .map_err(|e| AppError::Database(e.to_string()))
+    User::update(id, &fields).await.or_internal()
 }
 
 pub async fn delete(id: &str) -> Result<bool, AppError> {
-    let exists = User::find_by_id(id)
-        .await
-        .map_err(|e| AppError::Database(e.to_string()))?
-        .is_some();
-
-    if !exists {
-        return Err(AppError::NotFound("user not found".into()));
-    }
-
-    User::delete(id)
-        .await
-        .map_err(|e| AppError::Database(e.to_string()))
+    User::find_or_fail(id).await.or_internal()?;
+    User::delete(id).await.or_internal()
 }
 
 pub async fn get_profile(user_id: &str) -> Result<User, AppError> {
-    User::find_by_id(user_id)
-        .await
-        .map_err(|e| AppError::Database(e.to_string()))?
-        .ok_or_else(|| AppError::NotFound("user not found".into()))
+    User::find_or_fail(user_id).await.or_internal()
 }
 
 pub async fn upload_avatar(
@@ -116,10 +86,7 @@ pub async fn upload_avatar(
         .await
         .map_err(|e| AppError::BadRequest(e))?;
 
-    let old: User = User::find_by_id(user_id)
-        .await
-        .map_err(|e| AppError::Database(e.to_string()))?
-        .ok_or_else(|| AppError::NotFound("user not found".into()))?;
+    let old = User::find_or_fail(user_id).await.or_internal()?;
 
     if let Some(old_url) = old.avatar_url {
         storage::delete_avatar(&config.storage_dir, &old_url).await;
@@ -127,7 +94,7 @@ pub async fn upload_avatar(
 
     User::update(user_id, &[("avatar_url", FieldValue::String(url.clone()))])
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        .or_internal()?;
 
     Ok(url)
 }

@@ -6,7 +6,7 @@ use crate::app::models::EmailVerificationToken;
 use crate::app::models::User;
 use crate::config::AppConfig;
 use crate::app::mails::Mailer;
-use crate::error::AppError;
+use crate::error::{AppError, OrInternal};
 
 fn generate_otp(length: u32) -> String {
     use rand::Rng;
@@ -23,7 +23,7 @@ pub async fn send(
 ) -> Result<(), AppError> {
     let user = User::find_by_email(email)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?
+        .or_internal()?
         .ok_or_else(|| AppError::NotFound("user not found".into()))?;
 
     let code = generate_otp(config.otp_length);
@@ -32,7 +32,7 @@ pub async fn send(
 
     EmailVerificationToken::invalidate_previous(&user.id)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        .or_internal()?;
 
     EmailVerificationToken::create(&[
         ("id", FieldValue::String(auth::generate_id())),
@@ -41,7 +41,7 @@ pub async fn send(
         ("expires_at", FieldValue::DateTime(expires_at)),
     ])
     .await
-    .map_err(|e| AppError::Database(e.to_string()))?;
+    .or_internal()?;
 
     let verify_url = format!(
         "{}/api/v1/otp/verify?code={}&email={}",
@@ -61,23 +61,23 @@ pub async fn send(
 pub async fn verify(email: &str, code: &str) -> Result<(), AppError> {
     let user = User::find_by_email(email)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?
+        .or_internal()?
         .ok_or_else(|| AppError::NotFound("user not found".into()))?;
 
     let hash = auth::sha256_hex(code);
 
     let token = EmailVerificationToken::find_valid(&user.id, &hash)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?
+        .or_internal()?
         .ok_or_else(|| AppError::BadRequest("invalid or expired code".into()))?;
 
     EmailVerificationToken::mark_used(&token.id)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        .or_internal()?;
 
     User::verify_email(&user.id)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        .or_internal()?;
 
     Ok(())
 }

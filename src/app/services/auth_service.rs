@@ -1,16 +1,16 @@
 use api_core::auth;
 use api_core::crud::FieldValue;
 use api_core::crud::CrudService;
+use api_core::auth::TokenPair;
 
 use api_core::db;
 use crate::app::models::User;
 use crate::config::AppConfig;
 use crate::app::mails::Mailer;
-use crate::error::AppError;
+use crate::error::{AppError, OrInternal};
 
-pub struct TokenPair {
-    pub access_token: String,
-    pub refresh_token: String,
+fn to_internal<E: std::fmt::Display>(e: E) -> AppError {
+    AppError::Internal(e.to_string())
 }
 
 pub async fn register(
@@ -19,14 +19,11 @@ pub async fn register(
     password: &str,
     name: &str,
 ) -> Result<TokenPair, AppError> {
-    match User::find_by_email(email).await {
-        Ok(Some(_)) => return Err(AppError::BadRequest("email already taken".into())),
-        Err(e) => return Err(AppError::Database(e.to_string())),
-        Ok(None) => {}
+    if User::find_by_email(email).await.or_internal()?.is_some() {
+        return Err(AppError::BadRequest("email already taken".into()));
     }
 
-    let hash = auth::hash_password(password)
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    let hash = auth::hash_password(password).map_err(to_internal)?;
 
     let user = User::create(&[
         ("id", FieldValue::String(auth::generate_id())),
@@ -36,21 +33,16 @@ pub async fn register(
         ("roles", FieldValue::String("user".to_string())),
     ])
     .await
-    .map_err(|e| AppError::Database(e.to_string()))?;
+    .or_internal()?;
 
-    let tokens = auth::generate_token_pair(
+    auth::generate_token_pair(
         &user.id,
         &user.roles,
         &config.auth_secret,
         config.token_ttl,
         config.refresh_ttl,
     )
-    .map_err(|e| AppError::Internal(e.to_string()))?;
-
-    Ok(TokenPair {
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-    })
+    .map_err(to_internal)
 }
 
 pub async fn login(
@@ -60,29 +52,21 @@ pub async fn login(
 ) -> Result<TokenPair, AppError> {
     let user = User::find_by_email(email)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?
+        .or_internal()?
         .ok_or_else(|| AppError::Unauthorized("invalid email or password".into()))?;
 
-    let valid = auth::verify_password(password, &user.password_hash)
-        .map_err(|e| AppError::Internal(e.to_string()))?;
-
-    if !valid {
+    if !auth::verify_password(password, &user.password_hash).map_err(to_internal)? {
         return Err(AppError::Unauthorized("invalid email or password".into()));
     }
 
-    let tokens = auth::generate_token_pair(
+    auth::generate_token_pair(
         &user.id,
         &user.roles,
         &config.auth_secret,
         config.token_ttl,
         config.refresh_ttl,
     )
-    .map_err(|e| AppError::Internal(e.to_string()))?;
-
-    Ok(TokenPair {
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-    })
+    .map_err(to_internal)
 }
 
 pub async fn refresh(
@@ -114,24 +98,16 @@ pub async fn refresh(
     .execute(db::pool())
     .await;
 
-    let user = User::find_by_id(&claims.sub)
-        .await
-        .map_err(|e| AppError::Database(e.to_string()))?
-        .ok_or_else(|| AppError::Unauthorized("user not found".into()))?;
+    let user = User::find_or_fail(&claims.sub).await.or_internal()?;
 
-    let tokens = auth::generate_token_pair(
+    auth::generate_token_pair(
         &user.id,
         &user.roles,
         &config.auth_secret,
         config.token_ttl,
         config.refresh_ttl,
     )
-    .map_err(|e| AppError::Internal(e.to_string()))?;
-
-    Ok(TokenPair {
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-    })
+    .map_err(to_internal)
 }
 
 pub async fn forgot_password(
@@ -139,14 +115,14 @@ pub async fn forgot_password(
     mailer: &Mailer,
     email: &str,
 ) -> Result<(), AppError> {
-    let user = User::find_by_email(email).await.unwrap_or(None);
+    let user = User::find_by_email(email).await.or_internal()?;
 
     if let Some(user) = user {
         let plain_token = auth::generate_id();
         let token_hash = auth::sha256_hex(&plain_token);
         let expires_at = chrono::Utc::now() + chrono::Duration::hours(1);
 
-        let result = sqlx::query(
+        match sqlx::query(
             "INSERT INTO password_resets (id, email, token_hash, expires_at) VALUES ($1, $2, $3, $4)",
         )
         .bind(auth::generate_id())
@@ -154,9 +130,8 @@ pub async fn forgot_password(
         .bind(&token_hash)
         .bind(expires_at)
         .execute(db::pool())
-        .await;
-
-        match result {
+        .await
+        {
             Ok(_) => {
                 let reset_url = format!(
                     "{}/reset-password?token={}",
@@ -194,20 +169,19 @@ pub async fn reset_password(
     .bind(&token_hash)
     .fetch_optional(db::pool())
     .await
-    .map_err(|e| AppError::Database(e.to_string()))?
+    .or_internal()?
     .ok_or_else(|| AppError::BadRequest("invalid or expired token".into()))?;
 
-    let hash = auth::hash_password(new_password)
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    let hash = auth::hash_password(new_password).map_err(to_internal)?;
 
     let user = User::find_by_email(&email)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?
+        .or_internal()?
         .ok_or_else(|| AppError::NotFound("user not found".into()))?;
 
     User::update(&user.id, &[("password_hash", FieldValue::String(hash))])
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        .or_internal()?;
 
     let _ = sqlx::query(
         "UPDATE password_resets SET used_at = NOW() WHERE token_hash = $1",

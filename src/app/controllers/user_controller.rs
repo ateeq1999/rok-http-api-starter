@@ -1,7 +1,6 @@
 use axum::extract::Multipart;
 use axum::extract::Path;
 use axum::extract::State;
-use axum::Json;
 
 use api_core::response::ApiResponse;
 
@@ -10,7 +9,7 @@ use crate::auth::AuthUser;
 use crate::error::AppError;
 use crate::app::services;
 use crate::state::AppState;
-use crate::app::validators;
+use crate::app::validators::ValidatedJson;
 use crate::app::validators::user::*;
 
 pub async fn index(_admin: AdminOnly) -> Result<ApiResponse, AppError> {
@@ -28,10 +27,8 @@ pub async fn show(
 
 pub async fn store(
     _admin: AdminOnly,
-    Json(body): Json<CreateUserRequest>,
+    ValidatedJson(body): ValidatedJson<CreateUserRequest>,
 ) -> Result<ApiResponse, AppError> {
-    let body = validators::validate(body)
-        .map_err(|e| AppError::BadRequest(e.to_string()))?;
     let user = services::user_service::create(
         &body.email,
         &body.password,
@@ -45,10 +42,8 @@ pub async fn store(
 pub async fn update(
     _admin: AdminOnly,
     Path(id): Path<String>,
-    Json(body): Json<UpdateUserRequest>,
+    ValidatedJson(body): ValidatedJson<UpdateUserRequest>,
 ) -> Result<ApiResponse, AppError> {
-    let body = validators::validate(body)
-        .map_err(|e| AppError::BadRequest(e.to_string()))?;
     services::user_service::update(
         &id,
         body.email.as_deref(),
