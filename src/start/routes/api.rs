@@ -4,6 +4,7 @@ use axum::Router;
 use crate::app::controllers::{otp_controller, user_controller};
 use crate::state::AppState;
 
+/// Protected API routes (JWT required).
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/users", get(user_controller::index))

@@ -83,7 +83,7 @@ async fn serve(config: AppConfig, pool: PgPool) -> anyhow::Result<()> {
         mailer,
     };
 
-    let app = routes::app_router()
+    let app = routes::app_router(&app_state.config.auth_secret)
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(app_state);
