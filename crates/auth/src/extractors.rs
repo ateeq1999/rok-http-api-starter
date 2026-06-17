@@ -1,15 +1,10 @@
-use axum::extract::FromRef;
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
+use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 
-use api_core::auth::Claims;
-use api_core::response::{ApiResponse, ErrorCode};
+use crate::primitives::Claims;
 
-use crate::state::AppState;
-
-/// Extractor that reads JWT claims from request extensions.
-/// Requires `JwtAuthLayer` middleware to have run first.
 #[derive(Debug, Clone)]
 pub struct AuthUser {
     pub claims: Claims,
@@ -20,7 +15,6 @@ pub struct AuthUser {
 impl<S> FromRequestParts<S> for AuthUser
 where
     S: Send + Sync,
-    AppState: FromRef<S>,
 {
     type Rejection = AuthRejection;
 
@@ -42,14 +36,12 @@ where
     }
 }
 
-/// Extractor that requires admin role.
 #[allow(dead_code)]
 pub struct AdminOnly(pub AuthUser);
 
 impl<S> FromRequestParts<S> for AdminOnly
 where
     S: Send + Sync,
-    AppState: FromRef<S>,
 {
     type Rejection = AuthRejection;
 
@@ -71,9 +63,17 @@ pub enum AuthRejection {
 impl IntoResponse for AuthRejection {
     fn into_response(self) -> Response {
         let (code, msg) = match self {
-            Self::MissingToken => (ErrorCode::Unauthorized, "unauthenticated"),
-            Self::Forbidden => (ErrorCode::Forbidden, "insufficient permissions"),
+            Self::MissingToken => ("UNAUTHORIZED", "unauthenticated"),
+            Self::Forbidden => ("FORBIDDEN", "insufficient permissions"),
         };
-        ApiResponse::error(code, msg).into_response()
+        let body = serde_json::json!({
+            "status": "error",
+            "error": { "code": code, "message": msg }
+        });
+        let status = match self {
+            Self::MissingToken => StatusCode::UNAUTHORIZED,
+            Self::Forbidden => StatusCode::FORBIDDEN,
+        };
+        (status, axum::Json(body)).into_response()
     }
 }

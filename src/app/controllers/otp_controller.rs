@@ -5,8 +5,8 @@ use api_core::response::ApiResponse;
 use crate::error::AppError;
 use crate::app::services;
 use crate::state::AppState;
-use crate::app::validators::ValidatedJson;
-use crate::app::validators::otp::*;
+use auth::validators::ValidatedJson;
+use auth::validators::{SendOtpRequest, VerifyOtpRequest};
 
 pub async fn send(
     State(state): State<AppState>,

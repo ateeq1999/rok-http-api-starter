@@ -4,14 +4,12 @@ use std::sync::Arc;
 
 use axum::extract::Request;
 use axum::http::header;
+use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use tower::{Layer, Service};
 
-use api_core::auth::verify_token;
-use api_core::response::{ApiResponse, ErrorCode};
+use crate::primitives::verify_token;
 
-/// Layer that extracts and verifies JWT Bearer tokens.
-/// Injects `Claims` into request extensions for downstream extractors.
 #[derive(Clone)]
 pub struct JwtAuthLayer {
     secret: Arc<String>,
@@ -85,5 +83,9 @@ where
 }
 
 fn jwt_rejection(msg: &str) -> Response {
-    ApiResponse::error(ErrorCode::Unauthorized, msg.to_string()).into_response()
+    let body = serde_json::json!({
+        "status": "error",
+        "error": { "code": "UNAUTHORIZED", "message": msg }
+    });
+    (StatusCode::UNAUTHORIZED, axum::Json(body)).into_response()
 }

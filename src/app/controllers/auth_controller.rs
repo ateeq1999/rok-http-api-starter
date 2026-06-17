@@ -2,12 +2,12 @@ use axum::extract::State;
 
 use api_core::response::ApiResponse;
 
-use crate::auth::AuthUser;
+use auth::extractors::AuthUser;
 use crate::app::services;
 use crate::error::AppError;
 use crate::state::AppState;
-use crate::app::validators::ValidatedJson;
-use crate::app::validators::auth::*;
+use auth::validators::ValidatedJson;
+use auth::validators::{RefreshRequest, RegisterRequest, LoginRequest, ForgotPasswordRequest, ResetPasswordRequest};
 
 pub async fn refresh(
     State(state): State<AppState>,

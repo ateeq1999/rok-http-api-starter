@@ -1,4 +1,4 @@
-use api_core::auth;
+use auth::primitives;
 use api_core::crud::FieldValue;
 use api_core::crud::CrudService;
 
@@ -27,7 +27,7 @@ pub async fn send(
         .ok_or_else(|| AppError::NotFound("user not found".into()))?;
 
     let code = generate_otp(config.otp_length);
-    let hash = auth::sha256_hex(&code);
+    let hash = primitives::sha256_hex(&code);
     let expires_at = chrono::Utc::now() + chrono::Duration::hours(24);
 
     EmailVerificationToken::invalidate_previous(&user.id)
@@ -35,7 +35,7 @@ pub async fn send(
         .or_internal()?;
 
     EmailVerificationToken::create(&[
-        ("id", FieldValue::String(auth::generate_id())),
+        ("id", FieldValue::String(primitives::generate_id())),
         ("user_id", FieldValue::String(user.id.clone())),
         ("token_hash", FieldValue::String(hash)),
         ("expires_at", FieldValue::DateTime(expires_at)),
@@ -64,7 +64,7 @@ pub async fn verify(email: &str, code: &str) -> Result<(), AppError> {
         .or_internal()?
         .ok_or_else(|| AppError::NotFound("user not found".into()))?;
 
-    let hash = auth::sha256_hex(code);
+    let hash = primitives::sha256_hex(code);
 
     let token = EmailVerificationToken::find_valid(&user.id, &hash)
         .await

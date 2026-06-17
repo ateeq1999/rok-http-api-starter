@@ -11,9 +11,4 @@ sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-native-tls", "m
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1"
 async-trait = "0.1"
-jsonwebtoken = "9"
-argon2 = "0.5"
-sha2 = "0.10"
-uuid = { version = "1", features = ["v4"] }
-rand = "0.8"
 validator = { version = "0.19", features = ["derive"] }

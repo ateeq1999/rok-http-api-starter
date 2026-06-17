@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = [".", "crates/api-core"]
+members = [".", "crates/api-core", "crates/auth"]
 
 [package]
 name = "rok-api-start"
@@ -10,6 +10,7 @@ publish = false
 
 [dependencies]
 api-core = { path = "crates/api-core" }
+auth = { path = "crates/auth" }
 axum = { version = "0.8", features = ["multipart"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }

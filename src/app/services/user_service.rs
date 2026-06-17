@@ -1,4 +1,4 @@
-use api_core::auth;
+use auth::primitives;
 use api_core::crud::FieldValue;
 use api_core::crud::CrudService;
 
@@ -21,11 +21,11 @@ pub async fn create(
     name: &str,
     roles: &str,
 ) -> Result<User, AppError> {
-    let hash = auth::hash_password(password)
+    let hash = primitives::hash_password(password)
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
     User::create(&[
-        ("id", FieldValue::String(auth::generate_id())),
+        ("id", FieldValue::String(primitives::generate_id())),
         ("email", FieldValue::String(email.to_lowercase())),
         ("password_hash", FieldValue::String(hash)),
         ("name", FieldValue::String(name.to_string())),

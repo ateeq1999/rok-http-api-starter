@@ -1,7 +1,5 @@
-pub mod auth;
-pub mod extractor;
-pub mod otp;
 pub mod user;
 
+pub use auth::validators::{ValidatedJson, SendOtpRequest, VerifyOtpRequest};
+pub use auth::validators::{RegisterRequest, LoginRequest, ForgotPasswordRequest, ResetPasswordRequest, RefreshRequest};
 pub use api_core::validator::{validate, ValidationRejection};
-pub use extractor::ValidatedJson;

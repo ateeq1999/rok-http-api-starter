@@ -4,12 +4,11 @@ use axum::extract::State;
 
 use api_core::response::ApiResponse;
 
-use crate::auth::AdminOnly;
-use crate::auth::AuthUser;
+use auth::extractors::{AdminOnly, AuthUser};
 use crate::error::AppError;
 use crate::app::services;
 use crate::state::AppState;
-use crate::app::validators::ValidatedJson;
+use auth::validators::ValidatedJson;
 use crate::app::validators::user::*;
 
 pub async fn index(_admin: AdminOnly) -> Result<ApiResponse, AppError> {

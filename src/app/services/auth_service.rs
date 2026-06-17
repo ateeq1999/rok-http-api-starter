@@ -1,7 +1,7 @@
-use api_core::auth;
+use auth::primitives;
 use api_core::crud::FieldValue;
 use api_core::crud::CrudService;
-use api_core::auth::TokenPair;
+use auth::primitives::TokenPair;
 
 use api_core::db;
 use crate::app::models::User;
@@ -23,10 +23,10 @@ pub async fn register(
         return Err(AppError::BadRequest("email already taken".into()));
     }
 
-    let hash = auth::hash_password(password).map_err(to_internal)?;
+    let hash = primitives::hash_password(password).map_err(to_internal)?;
 
     let user = User::create(&[
-        ("id", FieldValue::String(auth::generate_id())),
+        ("id", FieldValue::String(primitives::generate_id())),
         ("email", FieldValue::String(email.to_lowercase())),
         ("password_hash", FieldValue::String(hash)),
         ("name", FieldValue::String(name.to_string())),
@@ -35,7 +35,7 @@ pub async fn register(
     .await
     .or_internal()?;
 
-    auth::generate_token_pair(
+    primitives::generate_token_pair(
         &user.id,
         &user.roles,
         &config.auth_secret,
@@ -55,11 +55,11 @@ pub async fn login(
         .or_internal()?
         .ok_or_else(|| AppError::Unauthorized("invalid email or password".into()))?;
 
-    if !auth::verify_password(password, &user.password_hash).map_err(to_internal)? {
+    if !primitives::verify_password(password, &user.password_hash).map_err(to_internal)? {
         return Err(AppError::Unauthorized("invalid email or password".into()));
     }
 
-    auth::generate_token_pair(
+    primitives::generate_token_pair(
         &user.id,
         &user.roles,
         &config.auth_secret,
@@ -73,10 +73,10 @@ pub async fn refresh(
     config: &AppConfig,
     refresh_token: &str,
 ) -> Result<TokenPair, AppError> {
-    let claims = auth::verify_token(refresh_token, &config.auth_secret)
+    let claims = primitives::verify_token(refresh_token, &config.auth_secret)
         .map_err(|_| AppError::Unauthorized("invalid or expired refresh token".into()))?;
 
-    let token_hash = auth::sha256_hex(refresh_token);
+    let token_hash = primitives::sha256_hex(refresh_token);
 
     let already_used: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM refresh_token_used WHERE token_hash = $1)",
@@ -93,14 +93,14 @@ pub async fn refresh(
     let _ = sqlx::query(
         "INSERT INTO refresh_token_used (id, token_hash) VALUES ($1, $2)",
     )
-    .bind(auth::generate_id())
+    .bind(primitives::generate_id())
     .bind(&token_hash)
     .execute(db::pool())
     .await;
 
     let user = User::find_or_fail(&claims.sub).await.or_internal()?;
 
-    auth::generate_token_pair(
+    primitives::generate_token_pair(
         &user.id,
         &user.roles,
         &config.auth_secret,
@@ -118,14 +118,14 @@ pub async fn forgot_password(
     let user = User::find_by_email(email).await.or_internal()?;
 
     if let Some(user) = user {
-        let plain_token = auth::generate_id();
-        let token_hash = auth::sha256_hex(&plain_token);
+        let plain_token = primitives::generate_id();
+        let token_hash = primitives::sha256_hex(&plain_token);
         let expires_at = chrono::Utc::now() + chrono::Duration::hours(1);
 
         match sqlx::query(
             "INSERT INTO password_resets (id, email, token_hash, expires_at) VALUES ($1, $2, $3, $4)",
         )
-        .bind(auth::generate_id())
+        .bind(primitives::generate_id())
         .bind(&user.email)
         .bind(&token_hash)
         .bind(expires_at)
@@ -159,7 +159,7 @@ pub async fn reset_password(
     token: &str,
     new_password: &str,
 ) -> Result<(), AppError> {
-    let token_hash = auth::sha256_hex(token);
+    let token_hash = primitives::sha256_hex(token);
 
     let email: String = sqlx::query_scalar(
         "SELECT email FROM password_resets
@@ -172,7 +172,7 @@ pub async fn reset_password(
     .or_internal()?
     .ok_or_else(|| AppError::BadRequest("invalid or expired token".into()))?;
 
-    let hash = auth::hash_password(new_password).map_err(to_internal)?;
+    let hash = primitives::hash_password(new_password).map_err(to_internal)?;
 
     let user = User::find_by_email(&email)
         .await
