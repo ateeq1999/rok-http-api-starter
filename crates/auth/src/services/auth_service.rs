@@ -24,10 +24,12 @@ pub async fn register<C: AuthContext>(
         ("roles", "user"),
     ]).await?;
 
+    let permissions = ctx.permission_finder().get_user_permissions(&user.id).await.unwrap_or_default();
     let family_id = primitives::generate_id();
     primitives::generate_token_pair_with_family(
         &user.id,
         &user.roles,
+        &permissions,
         &ctx.config().auth_secret,
         ctx.config().token_ttl,
         ctx.config().refresh_ttl,
@@ -52,10 +54,12 @@ pub async fn login<C: AuthContext>(
         return Err(AuthError::unauthorized("invalid credentials"));
     }
 
+    let permissions = ctx.permission_finder().get_user_permissions(&user.id).await.unwrap_or_default();
     let family_id = primitives::generate_id();
     primitives::generate_token_pair_with_family(
         &user.id,
         &user.roles,
+        &permissions,
         &ctx.config().auth_secret,
         ctx.config().token_ttl,
         ctx.config().refresh_ttl,
@@ -140,10 +144,12 @@ pub async fn refresh<C: AuthContext>(
 
     let user = ctx.user_finder().find_or_fail(&claims.sub).await?;
 
+    let permissions = ctx.permission_finder().get_user_permissions(&user.id).await.unwrap_or_default();
     let new_family_id = primitives::generate_id();
     primitives::generate_token_pair_with_family(
         &user.id,
         &user.roles,
+        &permissions,
         &config.auth_secret,
         config.token_ttl,
         config.refresh_ttl,

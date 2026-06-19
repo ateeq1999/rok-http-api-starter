@@ -140,6 +140,60 @@ GET {{baseUrl}}/auth/oauth/github/redirect
 ### GitHub Callback (redirect from GitHub)
 GET {{baseUrl}}/auth/oauth/github/callback?code=AUTHORIZATION_CODE&state=STATE
 
+### ─── RBAC ────────────────────────────────────────────────
+
+### List Roles
+GET {{baseUrl}}/roles
+Authorization: Bearer {{token}}
+
+### Create Role
+POST {{baseUrl}}/roles
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "editor",
+  "description": "Can edit content"
+}
+
+### Delete Role
+DELETE {{baseUrl}}/roles/ROLE_ID
+Authorization: Bearer {{token}}
+
+### Grant Permission to Role
+POST {{baseUrl}}/roles/ROLE_ID/permissions
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "permission_id": "users.read"
+}
+
+### Revoke Permission from Role
+DELETE {{baseUrl}}/roles/ROLE_ID/permissions/PERM_ID
+Authorization: Bearer {{token}}
+
+### List Permissions
+GET {{baseUrl}}/permissions
+Authorization: Bearer {{token}}
+
+### Assign Role to User
+POST {{baseUrl}}/users/USER_ID/roles
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "role_id": "role_admin"
+}
+
+### Remove Role from User
+DELETE {{baseUrl}}/users/USER_ID/roles/ROLE_ID
+Authorization: Bearer {{token}}
+
+### Get My Permissions
+GET {{baseUrl}}/me/permissions
+Authorization: Bearer {{token}}
+
 ### ─── OTP / Email Verification ────────────────────────────
 
 ### Send Registration OTP

@@ -153,10 +153,12 @@ pub async fn handle_callback<C: AuthContext>(
     .map_err(|e| AuthError::internal(format!("failed to upsert account: {e}")))?;
 
     // Generate JWT tokens
+    let permissions = ctx.permission_finder().get_user_permissions(&user.id).await.unwrap_or_default();
     let family_id = primitives::generate_id();
     primitives::generate_token_pair_with_family(
         &user.id,
         &user.roles,
+        &permissions,
         &config.auth_secret,
         config.token_ttl,
         config.refresh_ttl,

@@ -141,6 +141,26 @@ impl auth::context::AuthContext for AppState {
     fn user_finder(&self) -> &dyn auth::context::UserFinder {
         self
     }
+    fn permission_finder(&self) -> &dyn auth::context::PermissionFinder {
+        self
+    }
+}
+
+#[async_trait::async_trait]
+impl auth::context::PermissionFinder for AppState {
+    async fn get_user_permissions(&self, user_id: &str) -> Result<String, sqlx::Error> {
+        let perms: Vec<String> = sqlx::query_scalar(
+            "SELECT DISTINCT p.name FROM user_roles ur
+             JOIN role_permissions rp ON rp.role_id = ur.role_id
+             JOIN permissions p ON p.id = rp.permission_id
+             WHERE ur.user_id = $1
+             ORDER BY p.name",
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(perms.join(","))
+    }
 }
 
 impl From<auth::error::AuthError> for crate::error::AppError {

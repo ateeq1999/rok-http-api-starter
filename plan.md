@@ -384,7 +384,7 @@ Use cookies for state + pkce_verifier (simpler than DB table for single-server):
 
 ---
 
-## Phase 5 — Authorization (RBAC) ✅ IN PROGRESS
+## Phase 5 — Authorization (RBAC) ✅
 
 - `roles` + `permissions` + `role_permissions` + `user_roles` tables — minimal RBAC.
 - Permission checks via `user.claims.has_permission("users.write")` in handlers (explicit, no magic).
@@ -549,5 +549,5 @@ crates/auth/src/context.rs                 (10 lines — AuthContext trait)
 
 1. **Phase 4a first** (plugin DX) — reduces boilerplate, makes Phase 4b cleaner
 2. **Phase 4b** (social login) — OAuth flows inside the plugin
-3. **Phase 5** (RBAC) — if admin features needed soon
+3. **Phase 5** (RBAC) ✅ — permissions in JWT, explicit handler checks, RBAC management endpoints
 4. Skip Phase 6 (organizations) unless a concrete multi-tenant requirement appears

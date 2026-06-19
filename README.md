@@ -144,6 +144,39 @@ Migrations use `.up.sql` / `.down.sql` pairs in `database/migrations/`.
 | `PUT` | `/users/{id}` | Admin | Update user |
 | `DELETE` | `/users/{id}` | Admin | Delete user |
 
+### RBAC — Role & Permission Management (`/api/v1`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/roles` | Admin | List all roles with permissions |
+| `POST` | `/roles` | Admin | Create role |
+| `DELETE` | `/roles/{id}` | Admin | Delete role (system roles protected) |
+| `POST` | `/roles/{id}/permissions` | Admin | Grant permission to role |
+| `DELETE` | `/roles/{id}/permissions/{perm_id}` | Admin | Revoke permission from role |
+| `GET` | `/permissions` | Admin | List all permissions |
+| `POST` | `/users/{id}/roles` | Admin | Assign role to user |
+| `DELETE` | `/users/{id}/roles/{role_id}` | Admin | Remove role from user |
+| `GET` | `/me/permissions` | Bearer | List current user's permissions |
+
+### Social Login (`/api/v1/auth`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/auth/oauth/{provider}/redirect` | — | Redirect to OAuth provider (Google, GitHub) |
+| `GET` | `/auth/oauth/{provider}/callback` | — | Handle OAuth callback, returns tokens |
+
+## Permission Checking
+
+JWT tokens include a comma-separated `permissions` field. Check permissions in handlers:
+
+```rust
+if !user.claims.has_permission("users.write") {
+    return Err(AppError::forbidden("insufficient permissions"));
+}
+```
+
+Available permissions: `users.read`, `users.write`, `users.delete`, `roles.read`, `roles.write`, `roles.delete`, `permissions.read`, `permissions.write`.
+
 ### OTP / Email Verification (`/api/v1`)
 
 | Method | Path | Auth | Description |

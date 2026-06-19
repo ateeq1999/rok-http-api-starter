@@ -9,7 +9,7 @@ pub mod session;
 pub mod validators;
 
 pub mod prelude {
-    pub use crate::context::{AuthConfig, AuthContext, MailSender, UserFinder, UserRecord};
+    pub use crate::context::{AuthConfig, AuthContext, MailSender, PermissionFinder, UserFinder, UserRecord};
     pub use crate::error::AuthError;
     pub use crate::extractors::{AdminOnly, AuthUser};
     pub use crate::middleware::{AuthStrategy, JwtAuthLayer};

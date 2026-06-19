@@ -54,9 +54,15 @@ pub trait UserFinder: Send + Sync {
     async fn update_user(&self, id: &str, fields: &[(&str, Option<&str>)]) -> Result<UserRecord, sqlx::Error>;
 }
 
+#[async_trait::async_trait]
+pub trait PermissionFinder: Send + Sync {
+    async fn get_user_permissions(&self, user_id: &str) -> Result<String, sqlx::Error>;
+}
+
 pub trait AuthContext: Clone + Send + Sync + 'static {
     fn pool(&self) -> &PgPool;
     fn config(&self) -> &AuthConfig;
     fn mailer(&self) -> &dyn MailSender;
     fn user_finder(&self) -> &dyn UserFinder;
+    fn permission_finder(&self) -> &dyn PermissionFinder;
 }

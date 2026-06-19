@@ -14,8 +14,24 @@ pub struct Claims {
     pub exp: usize,
     pub iat: usize,
     pub roles: String,
+    #[serde(default)]
+    pub permissions: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub family_id: Option<String>,
+}
+
+impl Claims {
+    pub fn has_permission(&self, perm: &str) -> bool {
+        self.permissions.split(',').any(|p| p == perm)
+    }
+
+    pub fn has_any_permission(&self, perms: &[&str]) -> bool {
+        perms.iter().any(|p| self.has_permission(p))
+    }
+
+    pub fn has_role(&self, role: &str) -> bool {
+        self.roles.split(',').any(|r| r == role)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -27,16 +43,18 @@ pub struct TokenPair {
 pub fn generate_token_pair(
     user_id: &str,
     roles: &str,
+    permissions: &str,
     secret: &str,
     token_ttl: Duration,
     refresh_ttl: Duration,
 ) -> Result<TokenPair, jsonwebtoken::errors::Error> {
-    generate_token_pair_with_family(user_id, roles, secret, token_ttl, refresh_ttl, None)
+    generate_token_pair_with_family(user_id, roles, permissions, secret, token_ttl, refresh_ttl, None)
 }
 
 pub fn generate_token_pair_with_family(
     user_id: &str,
     roles: &str,
+    permissions: &str,
     secret: &str,
     token_ttl: Duration,
     refresh_ttl: Duration,
@@ -49,6 +67,7 @@ pub fn generate_token_pair_with_family(
         exp: now + token_ttl.as_secs() as usize,
         iat: now,
         roles: roles.to_string(),
+        permissions: permissions.to_string(),
         family_id: None,
     };
 
@@ -57,6 +76,7 @@ pub fn generate_token_pair_with_family(
         exp: now + refresh_ttl.as_secs() as usize,
         iat: now,
         roles: roles.to_string(),
+        permissions: permissions.to_string(),
         family_id,
     };
 

@@ -72,10 +72,12 @@ pub async fn verify_magic_link<C: AuthContext>(
         .await?
         .ok_or_else(|| AuthError::not_found("user not found"))?;
 
+    let permissions = ctx.permission_finder().get_user_permissions(&user.id).await.unwrap_or_default();
     let family_id = primitives::generate_id();
     primitives::generate_token_pair_with_family(
         &user.id,
         &user.roles,
+        &permissions,
         &ctx.config().auth_secret,
         ctx.config().token_ttl,
         ctx.config().refresh_ttl,
