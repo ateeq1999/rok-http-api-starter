@@ -384,13 +384,53 @@ Use cookies for state + pkce_verifier (simpler than DB table for single-server):
 
 ---
 
-## Phase 5 — Authorization (Bouncer-style RBAC)
+## Phase 5 — Authorization (RBAC) ✅ IN PROGRESS
 
 - `roles` + `permissions` + `role_permissions` + `user_roles` tables — minimal RBAC.
-- `Policy` trait (`fn allows(&self, user: &User, resource: &R) -> bool`) + Axum extractor (`Can<UpdatePost>`).
-- Replace `AdminOnly` with generic `RequirePermission("users.write")` extractor, keeping `AdminOnly` as alias.
+- Permission checks via `user.claims.has_permission("users.write")` in handlers (explicit, no magic).
+- `AdminOnly` kept for backward compatibility but deprecated in favor of permission checks.
+- RBAC management endpoints for admin role/permission CRUD.
 
-**New migrations:** `roles`, `permissions`, `role_permissions`, `user_roles`.
+### Database
+
+**New migration `000018_rbac.sql`:**
+```sql
+CREATE TABLE roles (id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT, ...);
+CREATE TABLE permissions (id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT, ...);
+CREATE TABLE role_permissions (role_id, permission_id) -- composite PK
+CREATE TABLE user_roles (user_id, role_id, assigned_at) -- composite PK
+```
+
+Seed: admin role gets all permissions, user role gets `users.read`. Auto-migrate existing `users.roles` string.
+
+### Permission checking
+
+Add `permissions` field to JWT Claims, query at login:
+```rust
+impl Claims {
+    pub fn has_permission(&self, perm: &str) -> bool {
+        self.permissions.split(',').any(|p| p == perm)
+    }
+}
+
+// In handlers:
+if !user.claims.has_permission("users.delete") {
+    return Err(AppError::forbidden("insufficient permissions"));
+}
+```
+
+### Endpoints
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `GET /roles` | Admin | List all roles with permissions |
+| `POST /roles` | Admin | Create role |
+| `DELETE /roles/{id}` | Admin | Delete role |
+| `POST /roles/{id}/permissions` | Admin | Grant permission to role |
+| `DELETE /roles/{id}/permissions/{perm_id}` | Admin | Revoke permission from role |
+| `POST /users/{id}/roles` | Admin | Assign role to user |
+| `DELETE /users/{id}/roles/{role_id}` | Admin | Remove role from user |
+| `GET /me/permissions` | Auth | List current user's permissions |
 
 ---
 
