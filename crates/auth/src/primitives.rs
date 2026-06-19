@@ -131,3 +131,11 @@ pub fn sha256_hex(input: &str) -> String {
 pub fn generate_id() -> String {
     Uuid::new_v4().to_string()
 }
+
+pub fn generate_otp(length: u32) -> String {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    (0..length)
+        .map(|_| rng.gen_range(0..10).to_string())
+        .collect()
+}

@@ -65,31 +65,38 @@ pub async fn user_permissions<C: AuthContext>(
 // ─── Role CRUD ────────────────────────────────────────────
 
 pub async fn list_roles<C: AuthContext>(ctx: &C) -> Result<Vec<RoleWithPermissions>, AuthError> {
-    let roles: Vec<Role> = sqlx::query_as("SELECT * FROM roles ORDER BY name")
-        .fetch_all(ctx.pool())
-        .await?;
-
-    let mut result = Vec::new();
-    for role in roles {
-        let permissions: Vec<String> = sqlx::query_scalar(
-            "SELECT p.name FROM role_permissions rp
-             JOIN permissions p ON p.id = rp.permission_id
-             WHERE rp.role_id = $1
-             ORDER BY p.name",
-        )
-        .bind(&role.id)
-        .fetch_all(ctx.pool())
-        .await?;
-
-        result.push(RoleWithPermissions {
-            id: role.id,
-            name: role.name,
-            description: role.description,
-            permissions,
-        });
+    #[derive(sqlx::FromRow)]
+    struct RolePermRow {
+        id: String,
+        name: String,
+        description: Option<String>,
+        permission: Option<String>,
     }
 
-    Ok(result)
+    let rows: Vec<RolePermRow> = sqlx::query_as(
+        "SELECT r.id, r.name, r.description, p.name AS permission
+         FROM roles r
+         LEFT JOIN role_permissions rp ON rp.role_id = r.id
+         LEFT JOIN permissions p ON p.id = rp.permission_id
+         ORDER BY r.name, p.name",
+    )
+    .fetch_all(ctx.pool())
+    .await?;
+
+    let mut map: std::collections::HashMap<String, RoleWithPermissions> = std::collections::HashMap::new();
+    for row in rows {
+        let entry = map.entry(row.id.clone()).or_insert_with(|| RoleWithPermissions {
+            id: row.id,
+            name: row.name,
+            description: row.description,
+            permissions: Vec::new(),
+        });
+        if let Some(perm) = row.permission {
+            entry.permissions.push(perm);
+        }
+    }
+
+    Ok(map.into_values().collect())
 }
 
 pub async fn create_role<C: AuthContext>(

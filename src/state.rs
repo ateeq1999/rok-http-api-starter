@@ -105,10 +105,10 @@ impl auth::context::AuthContext for AppState {
     fn pool(&self) -> &sqlx::PgPool {
         &self.pool
     }
-    fn config(&self) -> &auth::context::AuthConfig {
+    fn config(&self) -> &auth::config::AuthConfig {
         // Leak the config to get a 'static reference
         // In production, use Arc or once_cell
-        Box::leak(Box::new(auth::context::AuthConfig {
+        Box::leak(Box::new(auth::config::AuthConfig {
             auth_secret: self.config.auth_secret.clone(),
             auth_strategy: self.config.auth_strategy.clone(),
             token_ttl: self.config.token_ttl,
@@ -118,7 +118,7 @@ impl auth::context::AuthContext for AppState {
             google: if self.config.google_client_id.is_empty() {
                 None
             } else {
-                Some(auth::context::OAuthProviderConfig {
+                Some(auth::config::OAuthProviderConfig {
                     client_id: self.config.google_client_id.clone(),
                     client_secret: self.config.google_client_secret.clone(),
                     redirect_uri: self.config.google_redirect_uri.clone(),
@@ -127,7 +127,7 @@ impl auth::context::AuthContext for AppState {
             github: if self.config.github_client_id.is_empty() {
                 None
             } else {
-                Some(auth::context::OAuthProviderConfig {
+                Some(auth::config::OAuthProviderConfig {
                     client_id: self.config.github_client_id.clone(),
                     client_secret: self.config.github_client_secret.clone(),
                     redirect_uri: self.config.github_redirect_uri.clone(),

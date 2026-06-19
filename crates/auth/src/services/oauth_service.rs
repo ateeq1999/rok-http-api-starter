@@ -1,4 +1,5 @@
-use crate::context::{AuthContext, OAuthProviderConfig};
+use crate::config::OAuthProviderConfig;
+use crate::context::AuthContext;
 use crate::error::AuthError;
 use crate::primitives;
 use crate::primitives::TokenPair;

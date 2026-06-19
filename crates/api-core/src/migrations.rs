@@ -14,9 +14,7 @@ pub async fn run(pool: &PgPool) -> anyhow::Result<()> {
 async fn ensure_down_files() -> anyhow::Result<()> {
     let migrator = Migrator::new(Path::new("./database/migrations")).await?;
     if !migrator.iter().any(|m| m.migration_type.is_down_migration()) {
-        println!("No down-migration files found (*.down.sql).");
-        println!("This command requires reversible migrations with .up.sql / .down.sql pairs.");
-        std::process::exit(1);
+        anyhow::bail!("No down-migration files found. This command requires reversible migrations with .up.sql / .down.sql pairs.");
     }
     Ok(())
 }

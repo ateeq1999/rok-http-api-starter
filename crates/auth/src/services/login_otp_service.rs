@@ -3,14 +3,6 @@ use crate::error::AuthError;
 use crate::primitives;
 use crate::primitives::TokenPair;
 
-fn generate_otp(length: u32) -> String {
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
-    (0..length)
-        .map(|_| rng.gen_range(0..10).to_string())
-        .collect()
-}
-
 pub async fn send_login_otp<C: AuthContext>(
     ctx: &C,
     email: &str,
@@ -20,7 +12,7 @@ pub async fn send_login_otp<C: AuthContext>(
         .await?
         .ok_or_else(|| AuthError::not_found("user not found"))?;
 
-    let code = generate_otp(ctx.config().otp_length);
+    let code = primitives::generate_otp(ctx.config().otp_length);
     let code_hash = primitives::sha256_hex(&code);
     let expires_at = chrono::Utc::now() + chrono::Duration::minutes(10);
 

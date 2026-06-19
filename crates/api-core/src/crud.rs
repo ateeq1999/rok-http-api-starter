@@ -10,9 +10,7 @@ pub enum FieldValue {
     Float(f64),
     Bool(bool),
     DateTime(chrono::DateTime<chrono::Utc>),
-    #[allow(dead_code)]
     OptionString(Option<String>),
-    #[allow(dead_code)]
     Null,
 }
 
