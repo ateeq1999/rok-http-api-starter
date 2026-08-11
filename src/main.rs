@@ -7,12 +7,10 @@ use tower_http::trace::TraceLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
-use api_core::db;
 use rok_api_start::app::mails::Mailer;
 use rok_api_start::cli::{Cli, Command, DbCommand};
 use rok_api_start::config::AppConfig;
 use rok_api_start::start::routes;
-use rok_api_start::state::AppState;
 use auth::plugin::AuthPlugin;
 
 #[tokio::main]
@@ -30,7 +28,6 @@ async fn main() -> anyhow::Result<()> {
       let config = AppConfig::from_env();
       let pool = PgPool::connect(&config.database_url).await?;
       api_core::migrations::run(&pool).await?;
-      db::init(pool.clone());
       serve(config, pool).await?;
     }
     Some(Command::Db { command }) => {
@@ -65,12 +62,10 @@ async fn serve(
   pool: PgPool,
 ) -> anyhow::Result<()> {
   let mailer = Mailer::new(&config.smtp_host, config.smtp_port, &config.smtp_from)?;
+  let auth_secret = config.auth_secret.clone();
+  let auth_strategy = config.auth_strategy.clone();
 
-  let app_state = AppState {
-    pool,
-    config,
-    mailer,
-  };
+  let app_state = rok_api_start::state::bootstrap(config, pool, mailer)?;
 
   let auth = AuthPlugin::builder()
     .magic_link()
@@ -101,7 +96,7 @@ async fn serve(
     header::HeaderValue::from_static("max-age=31536000; includeSubDomains"),
   );
 
-    let app = routes::app_router(&app_state.config.auth_secret, &app_state.config.auth_strategy, &auth)
+    let app = routes::app_router(&auth_secret, &auth_strategy, &auth)
     .layer(cors)
     .layer(security_headers)
     .layer(frame_options)

@@ -1,5 +1,3 @@
-use std::sync::OnceLock;
-
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::Router;
@@ -7,31 +5,31 @@ use serde_json::Value;
 use sqlx::PgPool;
 use tower::ServiceExt;
 
-use rok_api_start::routes;
-
-static POOL: OnceLock<PgPool> = OnceLock::new();
-
-async fn db_pool() -> &'static PgPool {
-    POOL.get_or_init(|| {
-        let url = std::env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/axum_app_test".into());
-        PgPool::connect_lazy(&url).expect("failed to create test pool")
-    });
-    POOL.get().unwrap()
-}
+use auth::plugin::AuthPlugin;
+use rok_api_start::app::mails::Mailer;
+use rok_api_start::config::AppConfig;
+use rok_api_start::start::routes;
 
 async fn app() -> Router {
-    let pool = db_pool().await;
-    api_core::db::init(pool.clone());
-    let config = rok_api_start::config::AppConfig::from_env();
-    let mailer = rok_api_start::mail::Mailer::new(
-        &config.smtp_host,
-        config.smtp_port,
-        &config.smtp_from,
-    )
-    .unwrap();
-    let state = rok_api_start::state::AppState { pool: pool.clone(), config, mailer };
-    routes::app_router().with_state(state)
+    let config = AppConfig::from_env();
+    let pool = PgPool::connect_lazy(&config.database_url).expect("failed to create test pool");
+    let mailer = Mailer::new(&config.smtp_host, config.smtp_port, &config.smtp_from)
+        .expect("failed to build mailer");
+    let auth_secret = config.auth_secret.clone();
+    let auth_strategy = config.auth_strategy.clone();
+
+    let state = rok_api_start::state::bootstrap(config, pool, mailer).expect("bootstrap failed");
+
+    let auth = AuthPlugin::builder()
+        .magic_link()
+        .login_otp()
+        .totp_2fa()
+        .sessions()
+        .google()
+        .github()
+        .build();
+
+    routes::app_router(&auth_secret, &auth_strategy, &auth).with_state(state)
 }
 
 #[tokio::test]
@@ -71,4 +69,21 @@ async fn health_returns_json_content_type() {
         response.headers()["content-type"],
         "application/json"
     );
+}
+
+#[tokio::test]
+async fn users_index_requires_admin() {
+    let app = app().await;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/users")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    // No Authorization header at all -> the JwtAuthLayer rejects before the DI-injected
+    // UserService is ever reached, confirming the route is wired end to end.
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }

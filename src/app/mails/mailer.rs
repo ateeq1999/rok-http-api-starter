@@ -97,3 +97,19 @@ impl Mailer {
         Ok(())
     }
 }
+
+#[async_trait::async_trait]
+impl auth::context::MailSender for Mailer {
+    async fn send_password_reset(&self, to: &str, name: &str, token: &str, url: &str) -> Result<(), String> {
+        self.send_password_reset(to, name, token, url).await.map_err(|e| e.to_string())
+    }
+    async fn send_magic_link(&self, to: &str, name: &str, url: &str) -> Result<(), String> {
+        self.send_magic_link(to, name, url).await.map_err(|e| e.to_string())
+    }
+    async fn send_login_otp(&self, to: &str, name: &str, code: &str, url: &str) -> Result<(), String> {
+        self.send_login_otp(to, name, code, url).await.map_err(|e| e.to_string())
+    }
+    async fn send_otp(&self, to: &str, name: &str, code: &str, url: &str) -> Result<(), String> {
+        self.send_otp(to, name, code, url).await.map_err(|e| e.to_string())
+    }
+}

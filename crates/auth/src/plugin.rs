@@ -31,8 +31,6 @@ impl AuthPlugin {
 
     pub fn public_routes<C: AuthContext>(&self) -> Router<C> {
         let mut routes = Router::new()
-            .route("/register", post(handlers::auth::register::<C>))
-            .route("/login", post(handlers::auth::login::<C>))
             .route("/refresh", post(handlers::auth::refresh::<C>))
             .route("/forgot-password", post(handlers::auth::forgot_password::<C>))
             .route("/reset-password", post(handlers::auth::reset_password::<C>));

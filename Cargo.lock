@@ -541,6 +541,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7cd812cc2bc1d69d4764bd80df88b4317eaef9e773c75226407d9bc0876b211c"
 
 [[package]]
+name = "di"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "di-macros",
+ "thiserror 2.0.18",
+ "tokio",
+ "tower",
+]
+
+[[package]]
+name = "di-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2159,6 +2179,7 @@ dependencies = [
  "axum",
  "chrono",
  "clap",
+ "di",
  "dotenvy",
  "lettre",
  "rand 0.8.6",

@@ -55,6 +55,19 @@ pub trait OrInternal<T> {
     fn or_not_found(self) -> Result<T, AppError>;
 }
 
+impl From<auth::error::AuthError> for AppError {
+    fn from(e: auth::error::AuthError) -> Self {
+        match e {
+            auth::error::AuthError::Database(m) => Self::Database(m),
+            auth::error::AuthError::NotFound(m) => Self::NotFound(m),
+            auth::error::AuthError::Unauthorized(m) => Self::Unauthorized(m),
+            auth::error::AuthError::Forbidden(m) => Self::Forbidden(m),
+            auth::error::AuthError::BadRequest(m) => Self::BadRequest(m),
+            auth::error::AuthError::Internal(m) => Self::Internal(m),
+        }
+    }
+}
+
 impl<T> OrInternal<T> for Result<T, sqlx::Error> {
     fn or_internal(self) -> Result<T, AppError> {
         self.map_err(AppError::from)
